@@ -1,0 +1,31 @@
+version: 1
+kb:
+  curated_dir: docs/kb/curated
+  generated_dir: docs/kb/generated
+  validation_dir: .driftkb/validation
+sources:
+  root: .
+  include:
+    - src/**/*
+  exclude:
+    - "**/.git/**"
+validation:
+  default_stale_policy: warn
+  report_path: .driftkb/validation/last-run.json
+verify:
+  enabled: true
+  allow_shell: false
+  timeout_seconds: 10
+graph:
+  cache_path: .driftkb/call_graph_cache.json
+fingerprints:
+  enabled: true
+  snapshot_dir: .driftkb/validation/fingerprints
+adapters:
+  enabled:
+    - generic
+gaps:
+  enabled: true
+  whitelist_path: .driftkb/gap_whitelist.txt
+  risk_patterns:
+    - "@Transactional"

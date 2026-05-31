@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "driftkb"
+version = "0.1.0"
+description = "Keep Markdown knowledge bases honest when code changes."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+authors = [
+  { name = "DriftKB contributors" }
+]
+keywords = ["documentation", "knowledge-base", "markdown", "cli", "drift"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Documentation",
+]
+
+[project.urls]
+Homepage = "https://github.com/driftkb/driftkb"
+Documentation = "https://github.com/driftkb/driftkb/tree/main/docs"
+Issues = "https://github.com/driftkb/driftkb/issues"
+Source = "https://github.com/driftkb/driftkb"
+
+[project.scripts]
+driftkb = "driftkb.cli.main:main"
+
+[project.optional-dependencies]
+dev = [
+  "build>=1",
+  "pytest>=8",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

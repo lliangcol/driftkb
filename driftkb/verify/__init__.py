@@ -1,0 +1,1 @@
+"""Verify block support."""
