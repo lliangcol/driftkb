@@ -44,6 +44,10 @@ Allowed values:
 
 Important modules, classes, functions, routes, jobs, commands, or other named anchors that the KB depends on.
 
+The `enterprise-java` profile accepts `anchor_classes` as an alias and normalizes it
+to `anchor_symbols` internally. Generated stubs under that profile write
+`anchor_classes` for compatibility.
+
 ## `propagate`
 
 Optional call graph propagation settings for this page's `anchor_symbols`.
@@ -64,3 +68,28 @@ Optional human or team owner for review routing.
 ## `tags`
 
 Optional labels for grouping reports, ownership, or manual review workflows.
+
+## Generated stub review fields
+
+Default generated stubs use:
+
+```yaml
+kind: generated
+validation_status: pending_human_review
+```
+
+Before `driftkb promote`, a default-profile stub must have
+`validation_status: human_reviewed` and a non-empty `reviewed_by` field.
+
+With `--profile enterprise-java`, generated stubs use:
+
+```yaml
+kind: generated
+review_status: pending_review
+anchor_classes:
+  - com.example.Service
+```
+
+Promotion accepts `review_status: reviewed` or
+`review_status: human_reviewed`, and accepts either `reviewer` or `reviewed_by`
+as the human reviewer field.

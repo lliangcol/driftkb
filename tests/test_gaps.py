@@ -68,6 +68,49 @@ def test_gaps_detect_write_creates_generated_stub(git_repo: Path, capsys) -> Non
     assert "  - Transactional" in text
 
 
+def test_gaps_detect_enterprise_profile_writes_compatible_stub(git_repo: Path, capsys) -> None:
+    _write_project(git_repo, adapter="enterprise-java")
+    head = _init_and_commit(git_repo)
+
+    assert main(["gaps", "detect", "--repo-root", str(git_repo), "--profile", "enterprise-java", "--write"]) == 0
+
+    output = capsys.readouterr().out
+    stub = git_repo / ".agents" / "kb" / "zh" / "generated" / "payment-service-stub.md"
+    assert "written: 1" in output
+    text = stub.read_text(encoding="utf-8")
+    assert f"generated_from_commit: {head}" in text
+    assert "review_status: pending_review" in text
+    assert "anchor_classes:" in text
+    assert "anchor_symbols:" not in text
+
+
+def test_gaps_detect_enterprise_profile_uses_kb_section_map_as_existing_coverage(git_repo: Path, capsys) -> None:
+    _write_project(git_repo, adapter="enterprise-java")
+    section_map = git_repo / ".agents" / "kb" / "zh" / "_validation" / "kb_section_map.json"
+    section_map.parent.mkdir(parents=True)
+    section_map.write_text(
+        """
+{
+  "schema_version": 1,
+  "sections": [
+    {
+      "path": ".agents/kb/zh/curated/payment.md",
+      "anchor_classes": ["com.example.PaymentService"]
+    }
+  ]
+}
+""".lstrip(),
+        encoding="utf-8",
+    )
+    _init_and_commit(git_repo)
+
+    assert main(["gaps", "detect", "--repo-root", str(git_repo), "--profile", "enterprise-java"]) == 0
+
+    output = capsys.readouterr().out
+    assert "DriftKB gaps: PASS" in output
+    assert "gaps: 0" in output
+
+
 def test_gaps_detect_write_avoids_filename_collisions(git_repo: Path, capsys) -> None:
     _write_project(git_repo)
     second = git_repo / "src" / "main" / "java" / "com" / "other" / "PaymentService.java"
@@ -108,15 +151,15 @@ def test_gaps_detect_errors_on_unknown_adapter(git_repo: Path, capsys) -> None:
     assert "unknown adapter(s): java-typo" in capsys.readouterr().out
 
 
-def _write_project(path: Path) -> None:
+def _write_project(path: Path, *, adapter: str = "java") -> None:
     config_dir = path / ".driftkb"
     config_dir.mkdir()
     (config_dir / "config.yml").write_text(
-        """
+        f"""
 version: 1
 adapters:
   enabled:
-    - java
+    - {adapter}
 gaps:
   enabled: true
   whitelist_path: .driftkb/gap_whitelist.txt

@@ -45,6 +45,36 @@ def test_validate_propagates_callers_from_cache(git_repo: Path, capsys) -> None:
     assert propagated["metadata"]["related_anchor_symbol"] == "api.PaymentController"
 
 
+def test_validate_converts_edges_call_graph_cache(git_repo: Path, capsys) -> None:
+    _baseline_graph_repo(git_repo)
+    cache_path = git_repo / ".driftkb" / "call_graph_cache.json"
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "edges": [
+                    {
+                        "caller": "api.PaymentController",
+                        "callee": "payment.PaymentService",
+                    }
+                ],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    _commit_all(git_repo, "edges graph cache")
+    _change_payment_source(git_repo)
+
+    assert main(["validate", "--repo-root", str(git_repo), "--no-verify"]) == 0
+
+    report = json.loads((git_repo / ".driftkb" / "validation" / "last-run.json").read_text())
+    assert [issue["code"] for issue in report["warnings"]] == ["source_changed", "graph_propagated"]
+    assert report["metadata"]["graph_cache"]["format"] == "edges"
+    assert "warnings: 2" in capsys.readouterr().out
+
+
 def test_graph_propagation_deduplicates_duplicate_warnings(git_repo: Path, capsys) -> None:
     _baseline_graph_repo(git_repo, payment_anchors=("payment.PaymentService", "payment.PaymentFacade"))
     _write_graph_cache(

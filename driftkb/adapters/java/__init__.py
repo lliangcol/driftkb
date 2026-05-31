@@ -31,15 +31,7 @@ class JavaRegexAdapter:
         annotations = tuple(sorted(_annotation_text(match) for match in _ANNOTATION_RE.finditer(source)))
         imports = tuple(sorted(set(_IMPORT_RE.findall(source))))
         methods = tuple(sorted(set(_METHOD_RE.findall(source))))
-        semantic_payload = "\n".join(
-            (
-                f"package:{package or ''}",
-                *[f"type:{item}" for item in fqcn],
-                *[f"annotation:{item}" for item in annotations],
-                *[f"import:{item}" for item in imports],
-                *[f"method:{item}" for item in methods],
-            )
-        )
+        semantic_payload = build_java_semantic_payload(package, fqcn, annotations, imports, methods)
         raw_hash = hashlib.sha256(source.encode("utf-8")).hexdigest()
         semantic_hash = hashlib.sha256(semantic_payload.encode("utf-8")).hexdigest()
         return Fingerprint(
@@ -68,3 +60,21 @@ def _annotation_text(match: re.Match[str]) -> str:
     name = match.group(1)
     args = (match.group(2) or "").strip()
     return f"@{name}({args})" if args else f"@{name}"
+
+
+def build_java_semantic_payload(
+    package: str | None,
+    fqcn: tuple[str, ...],
+    annotations: tuple[str, ...],
+    imports: tuple[str, ...],
+    methods: tuple[str, ...],
+) -> str:
+    return "\n".join(
+        (
+            f"package:{package or ''}",
+            *[f"type:{item}" for item in fqcn],
+            *[f"annotation:{item}" for item in annotations],
+            *[f"import:{item}" for item in imports],
+            *[f"method:{item}" for item in methods],
+        )
+    )

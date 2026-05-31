@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from driftkb.core.config import ConfigError, parse_simple_yaml
+from driftkb.core.models import ProfileConfig
 
 
 class FrontmatterError(ValueError):
@@ -44,3 +45,14 @@ def split_frontmatter(markdown: str) -> FrontmatterDocument:
         raise FrontmatterError("Markdown frontmatter is empty.")
 
     return FrontmatterDocument(frontmatter=frontmatter, body=body)
+
+
+def normalize_frontmatter_aliases(frontmatter: dict[str, Any], profile: ProfileConfig) -> dict[str, Any]:
+    normalized = dict(frontmatter)
+    for alias, canonical in profile.frontmatter_aliases.items():
+        if alias not in normalized:
+            continue
+        if canonical in normalized:
+            raise FrontmatterError(f"frontmatter cannot contain both {alias} and {canonical}.")
+        normalized[canonical] = normalized[alias]
+    return normalized

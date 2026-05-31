@@ -26,6 +26,21 @@ class KBFile:
     adapters: tuple[str, ...] = ()
     owner: str | None = None
     tags: tuple[str, ...] = ()
+    reviewed_change_scope: str | None = None
+    reviewed_at: str | None = None
+    reviewed_paths: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ProfileConfig:
+    name: str = "default"
+    stale_policy_aliases: dict[str, str] = field(default_factory=dict)
+    frontmatter_aliases: dict[str, str] = field(default_factory=dict)
+    generated_anchor_field: str = "anchor_symbols"
+    generated_review_status_field: str = "validation_status"
+    generated_pending_review_status: str = "pending_human_review"
+    promote_review_statuses: tuple[str, ...] = ("human_reviewed",)
+    promote_reviewer_fields: tuple[str, ...] = ("reviewed_by",)
 
 
 @dataclass(frozen=True)

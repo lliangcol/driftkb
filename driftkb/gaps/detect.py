@@ -60,6 +60,7 @@ def detect_gaps(config: DriftKBConfig, *, write: bool = False, risk_filter: Risk
         warnings.append("git failed to get HEAD commit; generated_from_commit will be unknown")
 
     anchors = _curated_anchor_symbols(config, warnings)
+    anchors.update(_section_map_anchor_symbols(config, warnings))
     whitelist = load_gap_whitelist(config.gaps.whitelist_path)
 
     candidates = _scan_candidates(config, warnings)
@@ -93,7 +94,13 @@ def detect_gaps(config: DriftKBConfig, *, write: bool = False, risk_filter: Risk
                 warnings.append(f"skipped existing generated stub: {_report_path(gap.output_path, config.repo_root)}")
                 continue
             gap.output_path.write_text(
-                render_generated_stub(gap, checked_at_commit or "unknown"),
+                render_generated_stub(
+                    gap,
+                    checked_at_commit or "unknown",
+                    anchor_field=config.profile.generated_anchor_field,
+                    review_status_field=config.profile.generated_review_status_field,
+                    pending_status=config.profile.generated_pending_review_status,
+                ),
                 encoding="utf-8",
             )
             written.append(gap.output_path)
@@ -120,7 +127,14 @@ def load_gap_whitelist(path: Path) -> tuple[str, ...]:
     return tuple(patterns)
 
 
-def render_generated_stub(gap: Gap, generated_from_commit: str) -> str:
+def render_generated_stub(
+    gap: Gap,
+    generated_from_commit: str,
+    *,
+    anchor_field: str = "anchor_symbols",
+    review_status_field: str = "validation_status",
+    pending_status: str = "pending_human_review",
+) -> str:
     candidate = gap.candidate
     annotations = tuple(_display_annotation(annotation) for annotation in candidate.annotations)
     lines = [
@@ -130,10 +144,10 @@ def render_generated_stub(gap: Gap, generated_from_commit: str) -> str:
         f"risk: {candidate.risk}",
         f"generated_from_commit: {generated_from_commit}",
         "generator: driftkb gaps detect",
-        "validation_status: pending_human_review",
+        f"{review_status_field}: {pending_status}",
         "source_globs:",
         f'  - "{candidate.file}"',
-        "anchor_symbols:",
+        f"{anchor_field}:",
         f"  - {candidate.symbol}",
         "---",
         "",
@@ -246,6 +260,61 @@ def _curated_anchor_symbols(config: DriftKBConfig, warnings: list[str]) -> set[s
             warnings.append(f"skipped curated KB {kb_path}: {exc}")
             continue
         anchors.update(kb_file.anchor_symbols)
+    return anchors
+
+
+def _section_map_anchor_symbols(config: DriftKBConfig, warnings: list[str]) -> set[str]:
+    path = config.graph.kb_section_map_path
+    if path is None or not path.exists():
+        return set()
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        warnings.append(f"skipped kb_section_map.json: {exc}")
+        return set()
+
+    anchors = _anchors_from_section_map(raw)
+    if anchors is None:
+        warnings.append("skipped kb_section_map.json: unsupported schema")
+        return set()
+    return anchors
+
+
+def _anchors_from_section_map(raw: Any) -> set[str] | None:
+    if not isinstance(raw, dict):
+        return None
+
+    anchors: set[str] = set()
+    for key in ("anchor_symbols", "anchor_classes"):
+        value = raw.get(key)
+        if isinstance(value, list) and all(isinstance(item, str) for item in value):
+            anchors.update(value)
+
+    sections = raw.get("sections", raw.get("kb_sections"))
+    if isinstance(sections, dict):
+        section_values = sections.values()
+    elif isinstance(sections, list):
+        section_values = sections
+    else:
+        section_values = ()
+
+    for section in section_values:
+        if not isinstance(section, dict):
+            return None
+        for key in ("anchor_symbols", "anchor_classes", "symbols", "classes"):
+            value = section.get(key)
+            if isinstance(value, list) and all(isinstance(item, str) for item in value):
+                anchors.update(value)
+        symbol = section.get("symbol")
+        if isinstance(symbol, str):
+            anchors.add(symbol)
+
+    symbols = raw.get("symbols")
+    if isinstance(symbols, dict):
+        anchors.update(key for key in symbols if isinstance(key, str))
+    elif isinstance(symbols, list) and all(isinstance(item, str) for item in symbols):
+        anchors.update(symbols)
+
     return anchors
 
 

@@ -91,6 +91,43 @@ def test_promote_rejects_missing_reviewer(git_repo: Path, capsys) -> None:
     assert "reviewed_by must identify" in capsys.readouterr().out
 
 
+def test_promote_enterprise_profile_accepts_review_status_and_reviewer_aliases(git_repo: Path, capsys) -> None:
+    _write_enterprise_project(git_repo)
+    _git(git_repo, "init")
+    _git(git_repo, "config", "user.name", "DriftKB Tests")
+    _git(git_repo, "config", "user.email", "tests@example.invalid")
+    _git(git_repo, "add", ".")
+    _git(git_repo, "commit", "-m", "baseline")
+    head = _git(git_repo, "rev-parse", "HEAD").stdout.strip()
+
+    assert (
+        main(
+            [
+                "promote",
+                ".agents/kb/zh/generated/payment-service-stub.md",
+                "--repo-root",
+                str(git_repo),
+                "--profile",
+                "enterprise-java",
+            ]
+        )
+        == 0
+    )
+
+    output = capsys.readouterr().out
+    target = git_repo / ".agents" / "kb" / "zh" / "curated" / "payment-service-stub.md"
+    frontmatter, _ = parse_markdown_frontmatter(target)
+    assert "DriftKB promote: PASS" in output
+    assert frontmatter["kind"] == "curated"
+    assert frontmatter["last_verified_commit"] == head
+    assert frontmatter["anchor_symbols"] == ["com.example.PaymentService"]
+    assert "anchor_classes" not in frontmatter
+    assert "review_status" not in frontmatter
+    assert "reviewer" not in frontmatter
+
+    assert main(["validate", "--repo-root", str(git_repo), "--profile", "enterprise-java", "--no-write-report", "--no-verify"]) == 0
+
+
 def test_promote_frontmatter_fields_are_updated_after_human_review(git_repo: Path, capsys) -> None:
     head = _baseline_repo(git_repo)
 
@@ -325,6 +362,42 @@ owner: payments
 tags:
   - payments
   - generated
+---
+# [Needs review] com.example.PaymentService
+
+Human-authored review content.
+""",
+        encoding="utf-8",
+    )
+
+
+def _write_enterprise_project(path: Path) -> None:
+    source = path / "src" / "main" / "java" / "com" / "example" / "PaymentService.java"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        """
+package com.example;
+
+public class PaymentService {
+}
+""".lstrip(),
+        encoding="utf-8",
+    )
+    generated = path / ".agents" / "kb" / "zh" / "generated" / "payment-service-stub.md"
+    generated.parent.mkdir(parents=True)
+    generated.write_text(
+        """---
+kind: generated
+topic: payment-service-stub
+risk: high
+generated_from_commit: unknown
+generator: driftkb gaps detect
+review_status: reviewed
+reviewer: reviewer@example.invalid
+source_globs:
+  - "src/main/java/com/example/PaymentService.java"
+anchor_classes:
+  - com.example.PaymentService
 ---
 # [Needs review] com.example.PaymentService
 

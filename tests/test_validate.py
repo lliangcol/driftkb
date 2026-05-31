@@ -75,6 +75,84 @@ def test_validate_checks_untracked_source_files(git_repo: Path, capsys) -> None:
     assert "src/payment/extra.py" in output
 
 
+def test_validate_reviewed_paths_exempt_current_matched_dirty_paths(git_repo: Path, capsys) -> None:
+    _baseline_repo(git_repo, stale_policy="fail")
+    _add_reviewed_paths(
+        git_repo,
+        reviewed_paths=("src/payment/service.py",),
+    )
+    (git_repo / "src" / "payment" / "service.py").write_text("def pay():\n    return 2\n", encoding="utf-8")
+
+    exit_code = main(["validate", "--repo-root", str(git_repo), "--no-write-report", "--no-verify"])
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "DriftKB: PASS" in output
+    assert "source changed since last_verified_commit" not in output
+
+
+def test_validate_reviewed_paths_only_exempt_listed_current_paths(git_repo: Path, capsys) -> None:
+    _baseline_repo(git_repo, stale_policy="fail", source_glob="src/payment/**/*.py")
+    _add_reviewed_paths(
+        git_repo,
+        reviewed_paths=("src/payment/service.py",),
+    )
+    (git_repo / "src" / "payment" / "service.py").write_text("def pay():\n    return 2\n", encoding="utf-8")
+    (git_repo / "src" / "payment" / "extra.py").write_text("def extra():\n    return 1\n", encoding="utf-8")
+
+    exit_code = main(["validate", "--repo-root", str(git_repo), "--no-write-report", "--no-verify"])
+
+    output = capsys.readouterr().out
+    assert exit_code == 1
+    assert "DriftKB: FAIL" in output
+    assert "src/payment/extra.py" in output
+    assert "src/payment/service.py" not in output
+
+
+def test_validate_reviewed_paths_must_stay_in_source_globs(git_repo: Path, capsys) -> None:
+    _baseline_repo(git_repo, stale_policy="fail")
+    _add_reviewed_paths(
+        git_repo,
+        reviewed_paths=("docs/payment.md",),
+    )
+    (git_repo / "src" / "payment" / "service.py").write_text("def pay():\n    return 2\n", encoding="utf-8")
+
+    exit_code = main(["validate", "--repo-root", str(git_repo), "--no-write-report", "--no-verify"])
+
+    output = capsys.readouterr().out
+    assert exit_code == 1
+    assert "reviewed_paths must be inside source_globs" in output
+
+
+def test_validate_reviewed_paths_must_be_current_matched_dirty_paths(git_repo: Path, capsys) -> None:
+    _baseline_repo(git_repo, stale_policy="fail", source_glob="src/payment/**/*.py")
+    _add_reviewed_paths(
+        git_repo,
+        reviewed_paths=("src/payment/other.py",),
+    )
+    (git_repo / "src" / "payment" / "service.py").write_text("def pay():\n    return 2\n", encoding="utf-8")
+
+    exit_code = main(["validate", "--repo-root", str(git_repo), "--no-write-report", "--no-verify"])
+
+    output = capsys.readouterr().out
+    assert exit_code == 1
+    assert "reviewed_paths can only cover current matched dirty paths" in output
+
+
+def test_validate_reviewed_paths_fail_when_no_current_matched_dirty_paths(git_repo: Path, capsys) -> None:
+    _baseline_repo(git_repo, stale_policy="fail")
+    _add_reviewed_paths(
+        git_repo,
+        reviewed_paths=("src/payment/service.py",),
+    )
+
+    exit_code = main(["validate", "--repo-root", str(git_repo), "--no-write-report", "--no-verify"])
+
+    output = capsys.readouterr().out
+    assert exit_code == 1
+    assert "reviewed_paths can only cover current matched dirty paths" in output
+
+
 def test_validate_skip_policy_ignores_source_changes(git_repo: Path, capsys) -> None:
     _baseline_repo(git_repo, stale_policy="skip")
     _change_source(git_repo)
@@ -259,6 +337,181 @@ def test_validate_errors_on_unknown_adapter(git_repo: Path, capsys) -> None:
     assert "unknown adapter(s): typo-adapter" in capsys.readouterr().out
 
 
+def test_validate_enterprise_java_profile_accepts_frontmatter_aliases(git_repo: Path, capsys) -> None:
+    _init_git(git_repo)
+    (git_repo / "src" / "payment").mkdir(parents=True)
+    (git_repo / "src" / "payment" / "service.py").write_text("def pay():\n    return 1\n", encoding="utf-8")
+    _commit_all(git_repo, "source baseline")
+    base = _git(git_repo, "rev-parse", "HEAD").stdout.strip()
+    kb_dir = git_repo / ".agents" / "kb" / "zh" / "curated"
+    kb_dir.mkdir(parents=True)
+    (kb_dir / "payment.md").write_text(
+        f"""---
+last_verified_commit: {base}
+source_globs:
+  - "src/payment/**/*.py"
+stale_policy: warn_on_source_change
+anchor_classes:
+  - payment.PaymentService
+---
+# Payment
+""",
+        encoding="utf-8",
+    )
+    _commit_all(git_repo, "kb baseline")
+    _change_source(git_repo)
+
+    exit_code = main(["validate", "--repo-root", str(git_repo), "--profile", "enterprise-java", "--no-write-report"])
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "DriftKB: WARN" in output
+    assert "WARN .agents/kb/zh/curated/payment.md" in output
+    assert "src/payment/service.py" in output
+
+
+def test_validate_default_profile_ignores_retrieval_policy_file(git_repo: Path, capsys) -> None:
+    _baseline_repo(git_repo, stale_policy="warn")
+    (git_repo / "RETRIEVAL_POLICY.json").write_text("[]\n", encoding="utf-8")
+    _commit_all(git_repo, "add unrelated retrieval policy")
+
+    exit_code = main(["validate", "--repo-root", str(git_repo), "--no-write-report", "--no-verify"])
+
+    assert exit_code == 0
+    assert "DriftKB: PASS" in capsys.readouterr().out
+
+
+def test_validate_enterprise_java_profile_checks_retrieval_policy_defaults(git_repo: Path, capsys) -> None:
+    _init_git(git_repo)
+    (git_repo / "src").mkdir()
+    (git_repo / "src" / "service.py").write_text("def run():\n    return 1\n", encoding="utf-8")
+    _commit_all(git_repo, "source baseline")
+    base = _git(git_repo, "rev-parse", "HEAD").stdout.strip()
+    kb_dir = git_repo / ".agents" / "kb" / "zh" / "curated"
+    kb_dir.mkdir(parents=True)
+    (kb_dir / "service.md").write_text(
+        f"""---
+last_verified_commit: {base}
+source_globs: []
+---
+# Service
+""",
+        encoding="utf-8",
+    )
+    (git_repo / "RETRIEVAL_POLICY.json").write_text(
+        json.dumps(
+            {
+                "default_include": [".agents/kb/zh/curated/**/*.md"],
+                "default_exclude": [".agents/kb/zh/generated/**"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    _commit_all(git_repo, "add enterprise policy")
+
+    exit_code = main(["validate", "--repo-root", str(git_repo), "--profile", "enterprise-java", "--no-write-report"])
+
+    output = capsys.readouterr().out
+    assert exit_code == 1
+    assert "DriftKB: FAIL" in output
+    assert "default_exclude must exclude legacy/content" in output
+
+
+def test_validate_enterprise_java_profile_checks_historical_content_disclaimer(git_repo: Path, capsys) -> None:
+    _init_git(git_repo)
+    (git_repo / "src").mkdir()
+    (git_repo / "src" / "service.py").write_text("def run():\n    return 1\n", encoding="utf-8")
+    _commit_all(git_repo, "source baseline")
+    base = _git(git_repo, "rev-parse", "HEAD").stdout.strip()
+    kb_dir = git_repo / ".agents" / "kb" / "zh" / "curated" / "legacy" / "content"
+    kb_dir.mkdir(parents=True)
+    (kb_dir / "old.md").write_text(
+        f"""---
+last_verified_commit: {base}
+source_globs: []
+---
+# Old
+""",
+        encoding="utf-8",
+    )
+    (git_repo / "RETRIEVAL_POLICY.json").write_text(
+        json.dumps(
+            {
+                "default_include": [".agents/kb/zh/curated/**/*.md"],
+                "default_exclude": [".agents/kb/zh/curated/legacy/content/**"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    _commit_all(git_repo, "add historical content")
+
+    exit_code = main(["validate", "--repo-root", str(git_repo), "--profile", "enterprise-java", "--no-write-report"])
+
+    output = capsys.readouterr().out
+    assert exit_code == 1
+    assert "DriftKB: FAIL" in output
+    assert "historical-only disclaimer" in output
+
+
+def test_validate_enterprise_java_profile_accepts_valid_historical_content_policy(git_repo: Path, capsys) -> None:
+    _init_git(git_repo)
+    (git_repo / "src").mkdir()
+    (git_repo / "src" / "service.py").write_text("def run():\n    return 1\n", encoding="utf-8")
+    _commit_all(git_repo, "source baseline")
+    base = _git(git_repo, "rev-parse", "HEAD").stdout.strip()
+    kb_dir = git_repo / ".agents" / "kb" / "zh" / "curated" / "legacy" / "content"
+    kb_dir.mkdir(parents=True)
+    (kb_dir / "old.md").write_text(
+        f"""---
+last_verified_commit: {base}
+source_globs: []
+---
+# Old
+
+仅作历史参考，不作为当前事实依据。
+""",
+        encoding="utf-8",
+    )
+    (git_repo / "RETRIEVAL_POLICY.json").write_text(
+        json.dumps(
+            {
+                "default_include": [".agents/kb/zh/curated/**/*.md"],
+                "default_exclude": ["legacy/content/**"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    _commit_all(git_repo, "add valid historical content")
+
+    exit_code = main(["validate", "--repo-root", str(git_repo), "--profile", "enterprise-java", "--no-write-report"])
+
+    assert exit_code == 0
+    assert "DriftKB: PASS" in capsys.readouterr().out
+
+
+def test_graph_anchors_enterprise_java_profile_reads_anchor_classes(git_repo: Path, capsys) -> None:
+    _init_git(git_repo)
+    kb_dir = git_repo / ".agents" / "kb" / "zh" / "curated"
+    kb_dir.mkdir(parents=True)
+    (kb_dir / "payment.md").write_text(
+        """---
+source_globs:
+  - "src/payment/**/*.py"
+stale_policy: fail_on_source_change
+anchor_classes:
+  - payment.PaymentService
+---
+# Payment
+""",
+        encoding="utf-8",
+    )
+
+    exit_code = main(["graph", "anchors", "--repo-root", str(git_repo), "--profile", "enterprise-java"])
+
+    assert exit_code == 0
+    assert "payment.PaymentService" in capsys.readouterr().out
+
+
 def _baseline_repo(
     git_repo: Path,
     *,
@@ -279,6 +532,23 @@ def _baseline_repo(
 def _change_source(git_repo: Path) -> None:
     (git_repo / "src" / "payment" / "service.py").write_text("def pay():\n    return 2\n", encoding="utf-8")
     _commit_all(git_repo, "change payment source")
+
+
+def _add_reviewed_paths(git_repo: Path, *, reviewed_paths: tuple[str, ...]) -> None:
+    kb_path = git_repo / "docs" / "kb" / "curated" / "payment.md"
+    reviewed_block = "\n".join(f'  - "{path}"' for path in reviewed_paths)
+    kb_path.write_text(
+        kb_path.read_text(encoding="utf-8").replace(
+            "stale_policy: fail\n",
+            f"""stale_policy: fail
+reviewed_change_scope: matched_dirty_paths
+reviewed_at: 2026-05-31
+reviewed_paths:
+{reviewed_block}
+""",
+        ),
+        encoding="utf-8",
+    )
 
 
 def _write_kb(

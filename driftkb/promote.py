@@ -6,7 +6,7 @@ from typing import Any
 
 from driftkb.adapters.registry import build_adapters
 from driftkb.core.config import DriftKBConfig, dump_simple_yaml
-from driftkb.core.frontmatter import parse_markdown_frontmatter
+from driftkb.core.frontmatter import normalize_frontmatter_aliases, parse_markdown_frontmatter
 from driftkb.core.git import GitError, get_changed_files, get_head_commit, has_staged_changes
 from driftkb.core.paths import path_matches_any, repo_paths_relative_to_source_root
 from driftkb.fingerprints.update import FingerprintUpdateResult, update_fingerprints
@@ -54,7 +54,8 @@ def promote_generated_stub(
         raise PromoteError(f"target curated KB already exists: {_display_path(target_path, config.repo_root)}")
 
     frontmatter, body = parse_markdown_frontmatter(source_path)
-    _validate_generated_frontmatter(frontmatter)
+    frontmatter = normalize_frontmatter_aliases(frontmatter, config.profile)
+    _validate_generated_frontmatter(frontmatter, config)
 
     try:
         if has_staged_changes(config.repo_root):
@@ -87,15 +88,31 @@ def promote_generated_stub(
     )
 
 
-def _validate_generated_frontmatter(frontmatter: dict[str, Any]) -> None:
+def _validate_generated_frontmatter(frontmatter: dict[str, Any], config: DriftKBConfig) -> None:
     if frontmatter.get("kind") != "generated":
         raise PromoteError("only KB files with kind: generated can be promoted.")
-    validation_status = frontmatter.get("validation_status")
-    if validation_status != REVIEWED_PROMOTE_STATUS:
-        raise PromoteError(f"validation_status must be {REVIEWED_PROMOTE_STATUS} after human review.")
-    reviewed_by = frontmatter.get("reviewed_by")
+    review_status = _review_status(frontmatter, config)
+    if review_status not in config.profile.promote_review_statuses:
+        expected = ", ".join(config.profile.promote_review_statuses)
+        raise PromoteError(f"{config.profile.generated_review_status_field} must be {expected} after human review.")
+    reviewed_by = _reviewer(frontmatter, config)
     if not isinstance(reviewed_by, str) or not reviewed_by.strip():
-        raise PromoteError("reviewed_by must identify the human reviewer before promotion.")
+        expected = ", ".join(config.profile.promote_reviewer_fields)
+        raise PromoteError(f"{expected} must identify the human reviewer before promotion.")
+
+
+def _review_status(frontmatter: dict[str, Any], config: DriftKBConfig) -> Any:
+    field = config.profile.generated_review_status_field
+    if field in frontmatter:
+        return frontmatter.get(field)
+    return frontmatter.get("validation_status")
+
+
+def _reviewer(frontmatter: dict[str, Any], config: DriftKBConfig) -> Any:
+    for field in config.profile.promote_reviewer_fields:
+        if field in frontmatter:
+            return frontmatter.get(field)
+    return None
 
 
 def _ensure_fingerprint_sources_clean(
@@ -153,7 +170,16 @@ def _promoted_frontmatter(frontmatter: dict[str, Any], *, head_commit: str, stal
     promoted["kind"] = "curated"
     promoted["last_verified_commit"] = head_commit
     promoted["stale_policy"] = stale_policy
-    for key in ("generated_from_commit", "generator", "validation_status", "reviewed_by", "reviewed_at"):
+    for key in (
+        "generated_from_commit",
+        "generator",
+        "validation_status",
+        "review_status",
+        "reviewed_by",
+        "reviewer",
+        "reviewed_at",
+        "anchor_classes",
+    ):
         promoted.pop(key, None)
     return promoted
 

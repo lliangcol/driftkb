@@ -4,6 +4,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from driftkb.core.models import ProfileConfig
+from driftkb.profiles import DEFAULT_PROFILE, get_profile, get_profile_defaults
+
 DEFAULT_CONFIG_DIR = ".driftkb"
 DEFAULT_CONFIG_PATH = Path(DEFAULT_CONFIG_DIR) / "config.yml"
 DEFAULT_CURATED_KB_DIR = "docs/kb/curated"
@@ -25,6 +28,10 @@ DEFAULT_CONFIG_DATA: dict[str, Any] = {
     "validation": {
         "default_stale_policy": "warn",
         "report_path": ".driftkb/validation/last-run.json",
+    },
+    "retrieval_policy": {
+        "enabled": False,
+        "path": "RETRIEVAL_POLICY.json",
     },
     "verify": {
         "enabled": True,
@@ -74,6 +81,12 @@ class ValidationConfig:
 
 
 @dataclass(frozen=True)
+class RetrievalPolicyConfig:
+    enabled: bool = False
+    path: Path = Path("RETRIEVAL_POLICY.json")
+
+
+@dataclass(frozen=True)
 class VerifyConfig:
     enabled: bool = True
     allow_shell: bool = False
@@ -83,6 +96,7 @@ class VerifyConfig:
 @dataclass(frozen=True)
 class GraphConfig:
     cache_path: Path = Path(".driftkb/call_graph_cache.json")
+    kb_section_map_path: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -108,9 +122,11 @@ class DriftKBConfig:
     repo_root: Path
     path: Path
     version: int
+    profile: ProfileConfig
     kb: KBConfig
     sources: SourcesConfig
     validation: ValidationConfig
+    retrieval_policy: RetrievalPolicyConfig
     verify: VerifyConfig
     graph: GraphConfig
     fingerprints: FingerprintsConfig
@@ -119,26 +135,40 @@ class DriftKBConfig:
     extra: dict[str, Any] = field(default_factory=dict)
 
 
-def create_default_config(repo_root: Path) -> Path:
+def create_default_config(repo_root: Path, profile: str | None = None) -> Path:
     repo_root = repo_root.resolve()
     config_path = repo_root / DEFAULT_CONFIG_PATH
     config_path.parent.mkdir(parents=True, exist_ok=True)
 
+    try:
+        profile_config = get_profile(profile)
+        profile_defaults = get_profile_defaults(profile_config.name)
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from exc
+
+    data = _deep_merge(DEFAULT_CONFIG_DATA, profile_defaults)
+    if profile_config.name != DEFAULT_PROFILE:
+        data = {"profile": profile_config.name, **data}
+
+    kb_defaults = data["kb"]
+    validation_defaults = data["validation"]
+    fingerprints_defaults = data["fingerprints"]
     for directory in (
-        repo_root / DEFAULT_CURATED_KB_DIR,
-        repo_root / DEFAULT_GENERATED_KB_DIR,
-        repo_root / DEFAULT_VALIDATION_DIR,
-        repo_root / ".driftkb/validation/fingerprints",
+        repo_root / _string(kb_defaults, "curated_dir"),
+        repo_root / _string(kb_defaults, "generated_dir"),
+        repo_root / _string(kb_defaults, "validation_dir"),
+        repo_root / Path(_string(validation_defaults, "report_path")).parent,
+        repo_root / _string(fingerprints_defaults, "snapshot_dir"),
     ):
         directory.mkdir(parents=True, exist_ok=True)
 
     if not config_path.exists():
-        config_path.write_text(dump_simple_yaml(DEFAULT_CONFIG_DATA), encoding="utf-8")
+        config_path.write_text(dump_simple_yaml(data), encoding="utf-8")
 
     return config_path
 
 
-def load_config(repo_root: Path, config_path: Path | None = None) -> DriftKBConfig:
+def load_config(repo_root: Path, config_path: Path | None = None, profile: str | None = None) -> DriftKBConfig:
     repo_root = repo_root.resolve()
     config_path = _resolve_repo_path(repo_root, str(config_path), "config") if config_path else repo_root / DEFAULT_CONFIG_PATH
 
@@ -149,13 +179,22 @@ def load_config(repo_root: Path, config_path: Path | None = None) -> DriftKBConf
     else:
         raw = {}
 
-    data = _deep_merge(DEFAULT_CONFIG_DATA, raw)
-    known_keys = set(DEFAULT_CONFIG_DATA)
+    configured_profile = _profile_name(raw, explicit_profile=profile)
+    try:
+        profile_config = get_profile(configured_profile)
+        profile_defaults = get_profile_defaults(configured_profile)
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from exc
+
+    data = _deep_merge(_deep_merge(DEFAULT_CONFIG_DATA, profile_defaults), raw)
+    data["profile"] = profile_config.name
+    known_keys = {*DEFAULT_CONFIG_DATA, "profile"}
     extra = {key: value for key, value in data.items() if key not in known_keys}
 
     kb = _mapping(data, "kb")
     sources = _mapping(data, "sources")
     validation = _mapping(data, "validation")
+    retrieval_policy = _mapping(data, "retrieval_policy")
     verify = _mapping(data, "verify")
     graph = _mapping(data, "graph")
     fingerprints = _mapping(data, "fingerprints")
@@ -166,6 +205,7 @@ def load_config(repo_root: Path, config_path: Path | None = None) -> DriftKBConf
         repo_root=repo_root,
         path=config_path,
         version=_int(data, "version"),
+        profile=profile_config,
         kb=KBConfig(
             curated_dir=_resolve_repo_path(repo_root, _string(kb, "curated_dir"), "kb.curated_dir"),
             generated_dir=_resolve_repo_path(repo_root, _string(kb, "generated_dir"), "kb.generated_dir"),
@@ -177,8 +217,16 @@ def load_config(repo_root: Path, config_path: Path | None = None) -> DriftKBConf
             exclude=tuple(_string_list(sources, "exclude")),
         ),
         validation=ValidationConfig(
-            default_stale_policy=_string(validation, "default_stale_policy"),
+            default_stale_policy=_normalize_stale_policy(
+                _string(validation, "default_stale_policy"),
+                profile_config,
+                "validation.default_stale_policy",
+            ),
             report_path=_resolve_repo_path(repo_root, _string(validation, "report_path"), "validation.report_path"),
+        ),
+        retrieval_policy=RetrievalPolicyConfig(
+            enabled=_bool(retrieval_policy, "enabled"),
+            path=_resolve_repo_path(repo_root, _string(retrieval_policy, "path"), "retrieval_policy.path"),
         ),
         verify=VerifyConfig(
             enabled=_bool(verify, "enabled"),
@@ -187,6 +235,11 @@ def load_config(repo_root: Path, config_path: Path | None = None) -> DriftKBConf
         ),
         graph=GraphConfig(
             cache_path=_resolve_repo_path(repo_root, _string(graph, "cache_path"), "graph.cache_path"),
+            kb_section_map_path=_optional_repo_path(
+                repo_root,
+                graph.get("kb_section_map_path"),
+                "graph.kb_section_map_path",
+            ),
         ),
         fingerprints=FingerprintsConfig(
             enabled=_bool(fingerprints, "enabled"),
@@ -200,6 +253,22 @@ def load_config(repo_root: Path, config_path: Path | None = None) -> DriftKBConf
         ),
         extra=extra,
     )
+
+
+def _profile_name(raw: dict[str, Any], *, explicit_profile: str | None) -> str:
+    if explicit_profile is not None:
+        return explicit_profile
+    value = raw.get("profile", DEFAULT_PROFILE)
+    if not isinstance(value, str):
+        raise ConfigError("Configuration key `profile` must be a string.")
+    return value
+
+
+def _normalize_stale_policy(value: str, profile: ProfileConfig, field: str) -> str:
+    normalized = profile.stale_policy_aliases.get(value, value)
+    if normalized not in {"warn", "fail", "skip"}:
+        raise ConfigError(f"Configuration key `{field}` must be one of: fail, skip, warn.")
+    return normalized
 
 
 def parse_simple_yaml(text: str) -> dict[str, Any]:
@@ -306,7 +375,7 @@ def _format_scalar(value: Any) -> str:
     if isinstance(value, float):
         return str(value)
     text = str(value)
-    if any(char in text for char in (":", "#", "*")) or text.startswith((" ", "{", "[")):
+    if any(char in text for char in (":", "#", "*")) or text.startswith((" ", "{", "[", "@", "`")):
         return f'"{text}"'
     return text
 
@@ -374,3 +443,11 @@ def _resolve_repo_path(repo_root: Path, value: str, field: str) -> Path:
     except ValueError as exc:
         raise ConfigError(f"Configuration key `{field}` must stay inside the repository root.") from exc
     return resolved
+
+
+def _optional_repo_path(repo_root: Path, value: Any, field: str) -> Path | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ConfigError(f"Configuration key `{field}` must be a string.")
+    return _resolve_repo_path(repo_root, value, field)

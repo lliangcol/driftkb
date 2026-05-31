@@ -20,6 +20,12 @@ The MVP includes:
 
 The Java adapter is an example adapter, not a core assumption. Future adapters may cover Python, Go, TypeScript, or other ecosystems.
 
+The `enterprise-java` adapter is opt-in through config or `--profile enterprise-java`. It
+wraps the Java regex adapter and adds enterprise-oriented risk fingerprints for
+annotations and code patterns such as `@DS`, `@Transactional`,
+`@RocketMQMessageListener`, `@XxlJob`, RocketMQ sends, and `LogicException`
+error codes. It is not enabled by the default profile.
+
 ## What adapters may extract
 
 Adapters may report facts such as:
@@ -67,6 +73,28 @@ Limitations:
 - It does not resolve constants, annotation aliases, inherited types, overload semantics, or imports.
 - It can miss unusual formatting, nested declarations, comments that look like code, and complex generic signatures.
 - It should be treated as preview evidence for reducing obvious false positives, not as semantic proof.
+
+## Enterprise Java adapter
+
+Enable Enterprise Java extraction explicitly:
+
+```yaml
+adapters:
+  enabled:
+    - generic
+    - enterprise-java
+```
+
+Or use the Enterprise Java profile:
+
+```text
+driftkb validate --profile enterprise-java
+driftkb gaps detect --profile enterprise-java
+```
+
+The adapter records the same Java symbols as `java-regex` and adds
+`risk_fingerprints` metadata for enterprise Java review workflows. These fingerprints are
+profile/config-driven and do not assume a machine-local repository path.
 
 ## Snapshots
 

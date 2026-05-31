@@ -51,3 +51,30 @@ def test_report_to_json_serializes_issues() -> None:
             "metadata": {"field": "last_verified_commit"},
         }
     ]
+
+
+def test_report_schema_preserves_graph_cache_compatibility_metadata() -> None:
+    report = ValidationResult(
+        result=ValidationStatus.WARN,
+        checked_at_commit="def456",
+        metadata={
+            "graph_cache": {
+                "status": "loaded",
+                "schema_version": 1,
+                "format": "edges",
+                "node_count": 2,
+                "warnings": (),
+            }
+        },
+    )
+
+    payload = json.loads(report_to_json(report))
+
+    assert payload["schema_version"] == 1
+    assert payload["metadata"]["graph_cache"] == {
+        "status": "loaded",
+        "schema_version": 1,
+        "format": "edges",
+        "node_count": 2,
+        "warnings": [],
+    }

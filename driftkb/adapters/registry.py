@@ -15,6 +15,10 @@ def build_adapters(names: tuple[str, ...]) -> tuple[FingerprintAdapter, ...]:
             from driftkb.adapters.java import JavaRegexAdapter
 
             adapters.append(JavaRegexAdapter())
+        elif normalized in {"enterprise-java", "enterprise_java"}:
+            from driftkb.adapters.enterprise_java import EnterpriseJavaAdapter
+
+            adapters.append(EnterpriseJavaAdapter())
         else:
             unknown.append(name)
     if unknown:

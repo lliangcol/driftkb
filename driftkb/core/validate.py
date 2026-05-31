@@ -6,7 +6,7 @@ from typing import Any
 
 from driftkb.adapters.registry import build_adapters
 from driftkb.core.config import ConfigError, DriftKBConfig
-from driftkb.core.frontmatter import FrontmatterError, parse_markdown_frontmatter
+from driftkb.core.frontmatter import FrontmatterError, normalize_frontmatter_aliases, parse_markdown_frontmatter
 from driftkb.core.git import GitError, commit_exists, get_changed_files, get_head_commit
 from driftkb.core.models import KBFile, ValidationIssue, ValidationResult, ValidationStatus
 from driftkb.core.paths import (
@@ -16,9 +16,12 @@ from driftkb.core.paths import (
 )
 from driftkb.fingerprints.snapshots import compare_fingerprint, load_snapshot
 from driftkb.graph.cache import CallGraphCache, load_graph_cache
+from driftkb.profiles.validators import validate_profile_rules
 from driftkb.verify.blocks import extract_verify_blocks, run_verify_block
 
 ALLOWED_STALE_POLICIES = {"warn", "fail", "skip"}
+REVIEWED_CHANGE_SCOPE_MATCHED_DIRTY_PATHS = "matched_dirty_paths"
+ALLOWED_REVIEWED_CHANGE_SCOPES = {REVIEWED_CHANGE_SCOPE_MATCHED_DIRTY_PATHS}
 
 
 def apply_validate_overrides(
@@ -89,6 +92,7 @@ def validate_kb(config: DriftKBConfig) -> ValidationResult:
             continue
 
     _validate_adapter_names(config, kb_files)
+    warnings.extend(validate_profile_rules(config, kb_files))
 
     for kb_file in kb_files:
         if config.verify.enabled:
@@ -141,6 +145,8 @@ def validate_kb(config: DriftKBConfig) -> ValidationResult:
             path for path in changed_files if path_matches_any(path, kb_file.source_globs)
         )
         matched_paths = _paths_without_equal_fingerprint_snapshots(candidate_paths, kb_file, config)
+        matched_paths, reviewed_issues = _apply_reviewed_path_exemptions(matched_paths, kb_file)
+        warnings.extend(reviewed_issues)
         if not matched_paths:
             continue
 
@@ -183,11 +189,13 @@ def scan_curated_kb_files(kb_dir: Path) -> tuple[Path, ...]:
 
 def load_kb_file(path: Path, config: DriftKBConfig) -> KBFile:
     frontmatter, body = parse_markdown_frontmatter(path)
+    frontmatter = normalize_frontmatter_aliases(frontmatter, config.profile)
     stale_policy = _frontmatter_string(
         frontmatter,
         "stale_policy",
         config.validation.default_stale_policy,
     ).lower()
+    stale_policy = config.profile.stale_policy_aliases.get(stale_policy, stale_policy)
     if stale_policy not in ALLOWED_STALE_POLICIES:
         raise FrontmatterError(
             f"stale_policy must be one of {', '.join(sorted(ALLOWED_STALE_POLICIES))}."
@@ -205,6 +213,9 @@ def load_kb_file(path: Path, config: DriftKBConfig) -> KBFile:
         adapters=tuple(_string_list(frontmatter, "adapters")),
         owner=_optional_string(frontmatter, "owner"),
         tags=tuple(_string_list(frontmatter, "tags")),
+        reviewed_change_scope=_optional_string(frontmatter, "reviewed_change_scope"),
+        reviewed_at=_optional_string(frontmatter, "reviewed_at"),
+        reviewed_paths=tuple(_string_list(frontmatter, "reviewed_paths")),
     )
 
 
@@ -250,6 +261,70 @@ def _paths_without_equal_fingerprint_snapshots(
         if not compare_fingerprint(current, snapshot):
             stale_paths.append(source_path)
     return tuple(stale_paths)
+
+
+def _apply_reviewed_path_exemptions(
+    matched_paths: tuple[str, ...],
+    kb_file: KBFile,
+) -> tuple[tuple[str, ...], list[ValidationIssue]]:
+    if not kb_file.reviewed_paths and kb_file.reviewed_change_scope is None and kb_file.reviewed_at is None:
+        return matched_paths, []
+
+    issues: list[ValidationIssue] = []
+    if kb_file.reviewed_change_scope not in ALLOWED_REVIEWED_CHANGE_SCOPES:
+        expected = ", ".join(sorted(ALLOWED_REVIEWED_CHANGE_SCOPES))
+        issues.append(
+            _issue(
+                "reviewed_change_scope_invalid",
+                f"reviewed_change_scope must be one of: {expected}",
+                kb_file,
+                ValidationStatus.FAIL,
+            )
+        )
+
+    if not kb_file.reviewed_at:
+        issues.append(
+            _issue(
+                "reviewed_at_missing",
+                "reviewed_at is required when using reviewed_paths",
+                kb_file,
+                ValidationStatus.FAIL,
+            )
+        )
+
+    reviewed_paths = kb_file.reviewed_paths
+    outside_source_globs = tuple(
+        path for path in reviewed_paths if not path_matches_any(path, kb_file.source_globs)
+    )
+    if outside_source_globs:
+        issues.append(
+            _issue(
+                "reviewed_paths_outside_source_globs",
+                "reviewed_paths must be inside source_globs",
+                kb_file,
+                ValidationStatus.FAIL,
+                metadata={"reviewed_paths": outside_source_globs},
+            )
+        )
+
+    matched_path_set = set(matched_paths)
+    non_current_paths = tuple(path for path in reviewed_paths if path not in matched_path_set)
+    if non_current_paths:
+        issues.append(
+            _issue(
+                "reviewed_paths_not_current_dirty",
+                "reviewed_paths can only cover current matched dirty paths",
+                kb_file,
+                ValidationStatus.FAIL,
+                metadata={"reviewed_paths": non_current_paths, "matched_paths": matched_paths},
+            )
+        )
+
+    if issues:
+        return matched_paths, issues
+
+    reviewed_path_set = set(reviewed_paths)
+    return tuple(path for path in matched_paths if path not in reviewed_path_set), []
 
 
 def _validate_adapter_names(config: DriftKBConfig, kb_files: list[KBFile]) -> None:

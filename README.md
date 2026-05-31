@@ -76,10 +76,23 @@ docs/kb/curated/
 docs/kb/generated/
 ```
 
+Initialize the Enterprise Java-compatible profile layout without hard-coding a local
+checkout path:
+
+```text
+driftkb init --profile enterprise-java
+```
+
+This writes a sample `.driftkb/config.yml` only if it does not already exist and
+creates `.agents/kb/zh/curated/`, `.agents/kb/zh/generated/`, and validation
+directories. The profile enables Enterprise Java-compatible paths, `anchor_classes`
+frontmatter aliases, and the `enterprise-java` adapter through config/profile only.
+
 Validate curated KB files:
 
 ```text
 driftkb validate
+driftkb validate --profile enterprise-java
 ```
 
 By default this scans `docs/kb/curated/**/*.md`, compares each page's
@@ -110,6 +123,7 @@ Run advisory gap detection manually:
 
 ```text
 driftkb gaps detect
+driftkb gaps detect --profile enterprise-java
 ```
 
 Gap detection is not part of the default pre-push gate.
@@ -122,6 +136,7 @@ Promote a human-reviewed generated stub into curated KB:
 
 ```text
 driftkb promote docs/kb/generated/payment-service-stub.md
+driftkb promote .agents/kb/zh/generated/payment-service-stub.md --profile enterprise-java
 ```
 
 Promotion only moves an existing generated stub after human review. Before
@@ -129,6 +144,11 @@ promotion, the stub must have `validation_status: human_reviewed` and a
 non-empty `reviewed_by` field. The command updates frontmatter for curated
 validation and does not generate business content or trust AI draft text
 automatically.
+
+With `--profile enterprise-java`, generated stubs use
+`review_status: pending_review` and `anchor_classes`. Promotion accepts
+`review_status: reviewed` plus a non-empty `reviewer` field, then normalizes the
+file for curated validation.
 
 ## Example KB frontmatter
 
@@ -173,6 +193,9 @@ Project configuration lives in `.driftkb/config.yml` by default. The schema is e
 - Report output options.
 
 All paths, adapters, and graph providers should be configurable. The core must not assume a particular repository layout or programming language.
+
+See `docs/profiles.md` for profile-specific config defaults and compatibility
+fields.
 
 ## Security note
 
