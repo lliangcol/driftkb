@@ -8,7 +8,9 @@ from driftkb.adapters.base import Fingerprint
 
 _PACKAGE_RE = re.compile(r"^\s*package\s+([A-Za-z_][\w.]*)\s*;", re.MULTILINE)
 _IMPORT_RE = re.compile(r"^\s*import\s+(?:static\s+)?([A-Za-z_][\w.*]*)\s*;", re.MULTILINE)
-_TYPE_RE = re.compile(r"\b(?:public|protected|private|abstract|final|static|\s)*\b(class|interface|enum)\s+([A-Za-z_]\w*)")
+_TYPE_RE = re.compile(
+    r"\b(?:public|protected|private|abstract|final|static|\s)*\b(class|interface|enum)\s+([A-Za-z_]\w*)"
+)
 _ANNOTATION_RE = re.compile(r"@([A-Za-z_][\w.]*)(?:\s*\(([^)]*)\))?")
 _METHOD_RE = re.compile(
     r"\b(?:public|protected)\s+(?:static\s+)?(?:final\s+)?(?:<[^>]+>\s+)?[\w<>\[\].?,\s]+\s+([A-Za-z_]\w*)\s*\([^;{}]*\)\s*(?:throws\s+[^{]+)?\{",

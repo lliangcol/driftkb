@@ -4,7 +4,9 @@
 
 Goal: ship the first usable local and CI validation loop.
 
-Planned scope:
+Status: implemented in the `0.1.0` MVP release.
+
+Scope:
 
 - `driftkb validate` command.
 - Markdown KB discovery under configurable KB roots, defaulting to `docs/kb/`.
@@ -21,7 +23,10 @@ Planned scope:
 
 Goal: identify missing KB coverage without making generated output trusted by default.
 
-Planned scope:
+Status: partially implemented in `0.1.0`; future work should refine reports,
+workflow docs, and risk-pattern tuning.
+
+Scope:
 
 - `driftkb gaps detect` command.
 - Configurable source discovery for modules and features that should have KB coverage.

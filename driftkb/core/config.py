@@ -170,7 +170,9 @@ def create_default_config(repo_root: Path, profile: str | None = None) -> Path:
 
 def load_config(repo_root: Path, config_path: Path | None = None, profile: str | None = None) -> DriftKBConfig:
     repo_root = repo_root.resolve()
-    config_path = _resolve_repo_path(repo_root, str(config_path), "config") if config_path else repo_root / DEFAULT_CONFIG_PATH
+    config_path = (
+        _resolve_repo_path(repo_root, str(config_path), "config") if config_path else repo_root / DEFAULT_CONFIG_PATH
+    )
 
     if config_path.exists():
         raw = parse_simple_yaml(config_path.read_text(encoding="utf-8"))
@@ -243,7 +245,9 @@ def load_config(repo_root: Path, config_path: Path | None = None, profile: str |
         ),
         fingerprints=FingerprintsConfig(
             enabled=_bool(fingerprints, "enabled"),
-            snapshot_dir=_resolve_repo_path(repo_root, _string(fingerprints, "snapshot_dir"), "fingerprints.snapshot_dir"),
+            snapshot_dir=_resolve_repo_path(
+                repo_root, _string(fingerprints, "snapshot_dir"), "fingerprints.snapshot_dir"
+            ),
         ),
         adapters=AdaptersConfig(enabled=tuple(_string_list(adapters, "enabled"))),
         gaps=GapsConfig(

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
-import json
 
 from driftkb.cli.main import main
 from driftkb.core.frontmatter import parse_markdown_frontmatter
@@ -52,7 +52,7 @@ def test_promote_rejects_existing_target(git_repo: Path, capsys) -> None:
     _baseline_repo(git_repo)
     target = git_repo / "docs" / "kb" / "curated" / "payment-service-stub.md"
     target.parent.mkdir(parents=True)
-    target.write_text("---\nkind: curated\nsource_globs:\n  - \"src/**/*.py\"\n---\n# Existing\n", encoding="utf-8")
+    target.write_text('---\nkind: curated\nsource_globs:\n  - "src/**/*.py"\n---\n# Existing\n', encoding="utf-8")
 
     assert main(["promote", "docs/kb/generated/payment-service-stub.md", "--repo-root", str(git_repo)]) == 2
 
@@ -125,13 +125,38 @@ def test_promote_enterprise_profile_accepts_review_status_and_reviewer_aliases(g
     assert "review_status" not in frontmatter
     assert "reviewer" not in frontmatter
 
-    assert main(["validate", "--repo-root", str(git_repo), "--profile", "enterprise-java", "--no-write-report", "--no-verify"]) == 0
+    assert (
+        main(
+            [
+                "validate",
+                "--repo-root",
+                str(git_repo),
+                "--profile",
+                "enterprise-java",
+                "--no-write-report",
+                "--no-verify",
+            ]
+        )
+        == 0
+    )
 
 
 def test_promote_frontmatter_fields_are_updated_after_human_review(git_repo: Path, capsys) -> None:
     head = _baseline_repo(git_repo)
 
-    assert main(["promote", "docs/kb/generated/payment-service-stub.md", "--repo-root", str(git_repo), "--stale-policy", "warn"]) == 0
+    assert (
+        main(
+            [
+                "promote",
+                "docs/kb/generated/payment-service-stub.md",
+                "--repo-root",
+                str(git_repo),
+                "--stale-policy",
+                "warn",
+            ]
+        )
+        == 0
+    )
 
     capsys.readouterr()
     frontmatter, _ = parse_markdown_frontmatter(git_repo / "docs" / "kb" / "curated" / "payment-service-stub.md")
@@ -171,15 +196,18 @@ def test_promote_then_validate_reads_curated_file(git_repo: Path, capsys) -> Non
 def test_promote_can_update_fingerprint_snapshot(git_repo: Path, capsys) -> None:
     _baseline_repo(git_repo)
 
-    assert main(
-        [
-            "promote",
-            "docs/kb/generated/payment-service-stub.md",
-            "--repo-root",
-            str(git_repo),
-            "--update-fingerprints",
-        ]
-    ) == 0
+    assert (
+        main(
+            [
+                "promote",
+                "docs/kb/generated/payment-service-stub.md",
+                "--repo-root",
+                str(git_repo),
+                "--update-fingerprints",
+            ]
+        )
+        == 0
+    )
 
     output = capsys.readouterr().out
     assert "fingerprints_updated: 1" in output

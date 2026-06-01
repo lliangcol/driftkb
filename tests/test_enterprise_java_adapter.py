@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from driftkb.adapters.java import JavaRegexAdapter
 from driftkb.adapters.enterprise_java import EnterpriseJavaAdapter
+from driftkb.adapters.java import JavaRegexAdapter
 from driftkb.adapters.registry import build_adapters
 from driftkb.fingerprints.snapshots import compare_fingerprint
 

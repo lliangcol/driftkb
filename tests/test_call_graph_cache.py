@@ -5,7 +5,6 @@ from pathlib import Path
 
 from driftkb.cli.main import main
 from driftkb.graph.cache import load_graph_cache
-
 from tests.test_validate import _commit_all, _git, _init_git
 
 

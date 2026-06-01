@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from driftkb.core.models import ValidationResult, ValidationStatus
 
-
 REPORT_SCHEMA_VERSION = 1
 
 

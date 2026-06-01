@@ -32,10 +32,7 @@ def _match_segments(path_segments: list[str], pattern_segments: list[str]) -> bo
     head = pattern_segments[0]
     tail = pattern_segments[1:]
     if head == "**":
-        return any(
-            _match_segments(path_segments[index:], tail)
-            for index in range(len(path_segments) + 1)
-        )
+        return any(_match_segments(path_segments[index:], tail) for index in range(len(path_segments) + 1))
 
     if not path_segments:
         return False

@@ -141,9 +141,7 @@ def validate_kb(config: DriftKBConfig) -> ValidationResult:
             )
             changed_files = all_source_files(config)
 
-        candidate_paths = tuple(
-            path for path in changed_files if path_matches_any(path, kb_file.source_globs)
-        )
+        candidate_paths = tuple(path for path in changed_files if path_matches_any(path, kb_file.source_globs))
         matched_paths = _paths_without_equal_fingerprint_snapshots(candidate_paths, kb_file, config)
         matched_paths, reviewed_issues = _apply_reviewed_path_exemptions(matched_paths, kb_file)
         warnings.extend(reviewed_issues)
@@ -197,9 +195,7 @@ def load_kb_file(path: Path, config: DriftKBConfig) -> KBFile:
     ).lower()
     stale_policy = config.profile.stale_policy_aliases.get(stale_policy, stale_policy)
     if stale_policy not in ALLOWED_STALE_POLICIES:
-        raise FrontmatterError(
-            f"stale_policy must be one of {', '.join(sorted(ALLOWED_STALE_POLICIES))}."
-        )
+        raise FrontmatterError(f"stale_policy must be one of {', '.join(sorted(ALLOWED_STALE_POLICIES))}.")
     return KBFile(
         path=_relative_report_path(path, config.repo_root),
         frontmatter=frontmatter,
@@ -293,9 +289,7 @@ def _apply_reviewed_path_exemptions(
         )
 
     reviewed_paths = kb_file.reviewed_paths
-    outside_source_globs = tuple(
-        path for path in reviewed_paths if not path_matches_any(path, kb_file.source_globs)
-    )
+    outside_source_globs = tuple(path for path in reviewed_paths if not path_matches_any(path, kb_file.source_globs))
     if outside_source_globs:
         issues.append(
             _issue(

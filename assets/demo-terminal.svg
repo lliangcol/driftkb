@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-label="DriftKB terminal demo">
+  <rect width="1280" height="640" fill="#101418"/>
+  <rect x="88" y="76" width="1104" height="488" rx="16" fill="#171d22" stroke="#2e3942" stroke-width="2"/>
+  <circle cx="126" cy="118" r="10" fill="#ff5f57"/>
+  <circle cx="158" cy="118" r="10" fill="#ffbd2e"/>
+  <circle cx="190" cy="118" r="10" fill="#28c840"/>
+  <text x="88" y="42" fill="#f2f4f8" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="34" font-weight="700">DriftKB</text>
+  <text x="244" y="42" fill="#9fb0bd" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="24">Catch stale Markdown KB docs when code changes</text>
+  <text x="124" y="174" fill="#7dd3fc" font-family="Consolas, Menlo, monospace" font-size="26">$ driftkb validate</text>
+  <text x="124" y="224" fill="#86efac" font-family="Consolas, Menlo, monospace" font-size="26">DriftKB: PASS</text>
+  <text x="124" y="266" fill="#cbd5e1" font-family="Consolas, Menlo, monospace" font-size="22">checked_at_commit: cab87be</text>
+  <text x="124" y="304" fill="#cbd5e1" font-family="Consolas, Menlo, monospace" font-size="22">stale: 0  warnings: 0  verify: 1</text>
+  <rect x="124" y="338" width="1032" height="1" fill="#33414c"/>
+  <text x="124" y="390" fill="#7dd3fc" font-family="Consolas, Menlo, monospace" font-size="26">$ edit src/payment.py</text>
+  <text x="124" y="438" fill="#fca5a5" font-family="Consolas, Menlo, monospace" font-size="26">$ driftkb validate</text>
+  <text x="124" y="488" fill="#fca5a5" font-family="Consolas, Menlo, monospace" font-size="26">DriftKB: FAIL</text>
+  <text x="124" y="530" fill="#cbd5e1" font-family="Consolas, Menlo, monospace" font-size="22">docs/kb/curated/payment.md verify block no longer matches source</text>
+  <text x="88" y="608" fill="#9fb0bd" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="18">Local-first Python CLI | Markdown KB validation | hooks and CI reports</text>
+</svg>

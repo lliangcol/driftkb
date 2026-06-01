@@ -94,7 +94,10 @@ validation:
     assert config.kb.generated_dir == (tmp_path / ".agents" / "kb" / "zh" / "generated").resolve()
     assert config.kb.validation_dir == (tmp_path / ".agents" / "kb" / "zh" / "_validation").resolve()
     assert config.validation.default_stale_policy == "fail"
-    assert config.validation.report_path == (tmp_path / ".agents" / "kb" / "zh" / "_validation" / "last-run.json").resolve()
+    assert (
+        config.validation.report_path
+        == (tmp_path / ".agents" / "kb" / "zh" / "_validation" / "last-run.json").resolve()
+    )
     assert config.adapters.enabled == ("generic", "enterprise-java")
     assert config.gaps.risk_patterns == ("@DS", "@Transactional", "@RocketMQMessageListener", "@XxlJob")
 

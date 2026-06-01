@@ -18,6 +18,15 @@ Run tests:
 python -m pytest
 ```
 
+Run the local quality checks used by CI:
+
+```text
+ruff check .
+ruff format --check .
+python -m pytest --cov=driftkb --cov-report=term-missing
+python -m build
+```
+
 For CLI smoke checks during early development:
 
 ```text
@@ -25,6 +34,19 @@ python -m driftkb version
 python -m driftkb init
 python -m driftkb validate
 ```
+
+## Pull requests
+
+Please include:
+
+- what changed and why;
+- tests or smoke checks run;
+- docs updates for user-facing behavior;
+- safety notes if verify execution, hooks, or generated KB promotion changed.
+
+PRs should not add private paths, private repository names, or organization-specific
+assumptions. Public examples should use portable paths such as `docs/kb/` and
+`.driftkb/`.
 
 ## Submitting adapters
 

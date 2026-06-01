@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
 
 
 class GitError(RuntimeError):
@@ -88,11 +88,7 @@ def has_staged_changes(repo_root: Path) -> bool:
 
 
 def _split_git_paths(stdout: str) -> list[str]:
-    return [
-        line.strip().replace("\\", "/")
-        for line in stdout.splitlines()
-        if line.strip()
-    ]
+    return [line.strip().replace("\\", "/") for line in stdout.splitlines() if line.strip()]
 
 
 def _format_git_error(action: str, result: CommandResult) -> str:

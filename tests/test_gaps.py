@@ -134,7 +134,9 @@ public class PaymentService {
     assert "written: 2" in output
     assert len(stubs) == 2
     assert stubs[0].name != stubs[1].name
-    assert {stub.read_text(encoding="utf-8").split("anchor_symbols:\n  - ", 1)[1].splitlines()[0] for stub in stubs} == {
+    assert {
+        stub.read_text(encoding="utf-8").split("anchor_symbols:\n  - ", 1)[1].splitlines()[0] for stub in stubs
+    } == {
         "com.example.PaymentService",
         "com.other.PaymentService",
     }

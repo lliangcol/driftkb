@@ -2,26 +2,24 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from driftkb import __version__
 from driftkb.core.config import (
-    DEFAULT_CONFIG_DIR,
     DEFAULT_CONFIG_PATH,
-    DEFAULT_CURATED_KB_DIR,
+    ConfigError,
     create_default_config,
     load_config,
 )
-from driftkb.core.config import ConfigError
-from driftkb.core.models import ValidationIssue, ValidationResult, ValidationStatus
 from driftkb.core.frontmatter import FrontmatterError
+from driftkb.core.models import ValidationIssue, ValidationResult, ValidationStatus
 from driftkb.core.validate import apply_validate_overrides, load_kb_file, scan_curated_kb_files, validate_kb
 from driftkb.fingerprints.update import update_fingerprints
 from driftkb.gaps.detect import detect_gaps, result_to_json
 from driftkb.hooks.install import HookInstallError, install_hook
-from driftkb.promote import PromoteError, promote_generated_stub
 from driftkb.profiles import available_profiles
+from driftkb.promote import PromoteError, promote_generated_stub
 from driftkb.reporting.json_report import report_to_json, write_json_report
 
 
@@ -36,9 +34,13 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser = subparsers.add_parser("init", help="Create the default DriftKB config and KB directory.")
     init_parser.add_argument("--profile", choices=available_profiles(), help="Profile config to create.")
     validate_parser = subparsers.add_parser("validate", help="Validate KB freshness and verification rules.")
-    validate_parser.add_argument("--repo-root", type=Path, default=Path("."), help="Repository root. Defaults to current directory.")
+    validate_parser.add_argument(
+        "--repo-root", type=Path, default=Path("."), help="Repository root. Defaults to current directory."
+    )
     validate_parser.add_argument("--config", type=Path, help="Path to DriftKB config. Defaults to .driftkb/config.yml.")
-    validate_parser.add_argument("--profile", choices=available_profiles(), help="Profile to apply. Overrides config profile.")
+    validate_parser.add_argument(
+        "--profile", choices=available_profiles(), help="Profile to apply. Overrides config profile."
+    )
     validate_parser.add_argument("--kb-dir", type=Path, help="Override curated KB directory.")
     validate_parser.add_argument("--source-root", type=Path, help="Override source root for source_globs matching.")
     validate_parser.add_argument("--report", type=Path, help="Override JSON report path.")
@@ -56,48 +58,82 @@ def build_parser() -> argparse.ArgumentParser:
 
     promote_parser = subparsers.add_parser("promote", help="Promote a generated KB stub after human review.")
     promote_parser.add_argument("path", type=Path, help="Generated KB stub path, for example docs/kb/generated/foo.md.")
-    promote_parser.add_argument("--repo-root", type=Path, default=Path("."), help="Repository root. Defaults to current directory.")
+    promote_parser.add_argument(
+        "--repo-root", type=Path, default=Path("."), help="Repository root. Defaults to current directory."
+    )
     promote_parser.add_argument("--config", type=Path, help="Path to DriftKB config. Defaults to .driftkb/config.yml.")
-    promote_parser.add_argument("--profile", choices=available_profiles(), help="Profile to apply. Overrides config profile.")
-    promote_parser.add_argument("--stale-policy", choices=["warn", "fail"], default="fail", help="Stale policy for the curated KB.")
-    promote_parser.add_argument("--update-fingerprints", action="store_true", help="Update fingerprint snapshots after promotion.")
+    promote_parser.add_argument(
+        "--profile", choices=available_profiles(), help="Profile to apply. Overrides config profile."
+    )
+    promote_parser.add_argument(
+        "--stale-policy", choices=["warn", "fail"], default="fail", help="Stale policy for the curated KB."
+    )
+    promote_parser.add_argument(
+        "--update-fingerprints", action="store_true", help="Update fingerprint snapshots after promotion."
+    )
     promote_parser.add_argument("--dry-run", action="store_true", help="Show the promotion without moving files.")
 
     gaps_parser = subparsers.add_parser("gaps", help="Gap detection commands.")
     gaps_subparsers = gaps_parser.add_subparsers(dest="gaps_command")
     gaps_detect_parser = gaps_subparsers.add_parser("detect", help="Detect missing KB coverage candidates.")
-    gaps_detect_parser.add_argument("--repo-root", type=Path, default=Path("."), help="Repository root. Defaults to current directory.")
-    gaps_detect_parser.add_argument("--config", type=Path, help="Path to DriftKB config. Defaults to .driftkb/config.yml.")
-    gaps_detect_parser.add_argument("--profile", choices=available_profiles(), help="Profile to apply. Overrides config profile.")
+    gaps_detect_parser.add_argument(
+        "--repo-root", type=Path, default=Path("."), help="Repository root. Defaults to current directory."
+    )
+    gaps_detect_parser.add_argument(
+        "--config", type=Path, help="Path to DriftKB config. Defaults to .driftkb/config.yml."
+    )
+    gaps_detect_parser.add_argument(
+        "--profile", choices=available_profiles(), help="Profile to apply. Overrides config profile."
+    )
     gaps_detect_parser.add_argument("--write", action="store_true", help="Write generated KB stubs.")
-    gaps_detect_parser.add_argument("--dry-run", action="store_true", help="Do not write generated KB stubs. This is the default.")
+    gaps_detect_parser.add_argument(
+        "--dry-run", action="store_true", help="Do not write generated KB stubs. This is the default."
+    )
     gaps_detect_parser.add_argument("--format", choices=["text", "json"], default="text", help="Output format.")
     gaps_detect_parser.add_argument("--risk", choices=["high", "all"], default="high", help="Candidate risk filter.")
 
     graph_parser = subparsers.add_parser("graph", help="Call graph cache helper commands.")
     graph_subparsers = graph_parser.add_subparsers(dest="graph_command")
     graph_anchors_parser = graph_subparsers.add_parser("anchors", help="Print curated KB anchor_symbols as JSON.")
-    graph_anchors_parser.add_argument("--repo-root", type=Path, default=Path("."), help="Repository root. Defaults to current directory.")
-    graph_anchors_parser.add_argument("--config", type=Path, help="Path to DriftKB config. Defaults to .driftkb/config.yml.")
-    graph_anchors_parser.add_argument("--profile", choices=available_profiles(), help="Profile to apply. Overrides config profile.")
+    graph_anchors_parser.add_argument(
+        "--repo-root", type=Path, default=Path("."), help="Repository root. Defaults to current directory."
+    )
+    graph_anchors_parser.add_argument(
+        "--config", type=Path, help="Path to DriftKB config. Defaults to .driftkb/config.yml."
+    )
+    graph_anchors_parser.add_argument(
+        "--profile", choices=available_profiles(), help="Profile to apply. Overrides config profile."
+    )
     graph_anchors_parser.add_argument("--kb-dir", type=Path, help="Override curated KB directory.")
 
     fingerprints_parser = subparsers.add_parser("fingerprints", help="Fingerprint snapshot commands.")
     fingerprints_subparsers = fingerprints_parser.add_subparsers(dest="fingerprints_command")
     fingerprints_update_parser = fingerprints_subparsers.add_parser("update", help="Update fingerprint snapshots.")
-    fingerprints_update_parser.add_argument("--repo-root", type=Path, default=Path("."), help="Repository root. Defaults to current directory.")
-    fingerprints_update_parser.add_argument("--config", type=Path, help="Path to DriftKB config. Defaults to .driftkb/config.yml.")
-    fingerprints_update_parser.add_argument("--profile", choices=available_profiles(), help="Profile to apply. Overrides config profile.")
+    fingerprints_update_parser.add_argument(
+        "--repo-root", type=Path, default=Path("."), help="Repository root. Defaults to current directory."
+    )
+    fingerprints_update_parser.add_argument(
+        "--config", type=Path, help="Path to DriftKB config. Defaults to .driftkb/config.yml."
+    )
+    fingerprints_update_parser.add_argument(
+        "--profile", choices=available_profiles(), help="Profile to apply. Overrides config profile."
+    )
     fingerprints_update_parser.add_argument("--kb-file", type=Path, help="Update snapshots for one curated KB file.")
-    fingerprints_update_parser.add_argument("--all", action="store_true", help="Update snapshots for all curated KB files.")
+    fingerprints_update_parser.add_argument(
+        "--all", action="store_true", help="Update snapshots for all curated KB files."
+    )
 
     hooks_parser = subparsers.add_parser("hooks", help="Hook management commands.")
     hooks_subparsers = hooks_parser.add_subparsers(dest="hooks_command")
     hooks_install_parser = hooks_subparsers.add_parser("install", help="Install repository hooks.")
     hooks_install_parser.add_argument("hook", choices=["pre-push"], help="Hook to install.")
-    hooks_install_parser.add_argument("--repo-root", type=Path, default=Path("."), help="Repository root. Defaults to current directory.")
+    hooks_install_parser.add_argument(
+        "--repo-root", type=Path, default=Path("."), help="Repository root. Defaults to current directory."
+    )
     hooks_install_parser.add_argument("--force", action="store_true", help="Overwrite an existing hook.")
-    hooks_install_parser.add_argument("--strict", action="store_true", help="Install a hook that fails on WARN as well as FAIL.")
+    hooks_install_parser.add_argument(
+        "--strict", action="store_true", help="Install a hook that fails on WARN as well as FAIL."
+    )
 
     return parser
 

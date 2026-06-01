@@ -23,7 +23,9 @@ def test_init_creates_default_config_and_kb_dir(tmp_path: Path, monkeypatch, cap
     assert "created .driftkb/config.yml and docs/kb/curated/" in capsys.readouterr().out
 
 
-def test_init_enterprise_java_profile_creates_profile_config_without_overwriting(tmp_path: Path, monkeypatch, capsys) -> None:
+def test_init_enterprise_java_profile_creates_profile_config_without_overwriting(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
     monkeypatch.chdir(tmp_path)
 
     assert main(["init", "--profile", "enterprise-java"]) == 0

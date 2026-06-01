@@ -194,8 +194,7 @@ def _relative_to_generated_dir(path: Path, config: DriftKBConfig) -> Path:
         return path.relative_to(config.kb.generated_dir)
     except ValueError as exc:
         raise PromoteError(
-            "promote only accepts files under "
-            f"{_display_path(config.kb.generated_dir, config.repo_root)}."
+            f"promote only accepts files under {_display_path(config.kb.generated_dir, config.repo_root)}."
         ) from exc
 
 

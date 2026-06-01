@@ -125,4 +125,6 @@ def _string_list(value: Any) -> bool:
 
 def _excludes_legacy_content(pattern: str) -> bool:
     normalized = pattern.strip().replace("\\", "/")
-    return any(normalized == expected or normalized.endswith(f"/{expected}") for expected in ENTERPRISE_LEGACY_CONTENT_EXCLUDES)
+    return any(
+        normalized == expected or normalized.endswith(f"/{expected}") for expected in ENTERPRISE_LEGACY_CONTENT_EXCLUDES
+    )
