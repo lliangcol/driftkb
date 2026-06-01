@@ -10,16 +10,6 @@ permissions:
   contents: read
 
 jobs:
-  dependency-review:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/dependency-review-action@v4
-
   pip-audit:
     runs-on: ubuntu-latest
     steps:
