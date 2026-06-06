@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-import shlex
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -13,6 +12,7 @@ subprocess_run = subprocess.run
 EXPECTED_RE = re.compile(r"^\s*#\s*expected:\s*match_count\s*>=\s*(?P<count>\d+)\s*$")
 FENCE_RE = re.compile(r"^(?P<fence>`{3,}|~{3,})(?P<info>[^\n]*)$")
 SAMPLE_LINES = 20
+SAMPLE_CHARS = 4000
 _DANGEROUS_RG_FLAGS = {
     "-L",
     "--config",
@@ -139,6 +139,7 @@ def run_verify_block(
     source_root: Path,
     allow_shell: bool = False,
     timeout_seconds: float = 10,
+    capture_samples: bool = False,
 ) -> VerifyBlockResult:
     command = _extract_command(block.body)
     expected = _extract_expected(block.body)
@@ -177,7 +178,7 @@ def run_verify_block(
         )
 
     try:
-        args = shlex.split(command, posix=True)
+        args = _split_command(command)
     except ValueError as exc:
         return VerifyBlockResult(
             block_index=block.block_index,
@@ -234,12 +235,12 @@ def run_verify_block(
             actual_match_count=None,
             result=ValidationStatus.WARN,
             message=f"rg verify command timed out after {timeout_seconds:g} seconds",
-            stdout_sample=_sample(exc.stdout or ""),
-            stderr_sample=_sample(exc.stderr or ""),
+            stdout_sample=_sample(exc.stdout or "", capture=capture_samples),
+            stderr_sample=_sample(exc.stderr or "", capture=capture_samples),
         )
 
-    stdout_sample = _sample(completed.stdout)
-    stderr_sample = _sample(completed.stderr)
+    stdout_sample = _sample(completed.stdout, capture=capture_samples)
+    stderr_sample = _sample(completed.stderr, capture=capture_samples)
 
     if completed.returncode == 0:
         match_count = _non_empty_line_count(completed.stdout)
@@ -304,7 +305,7 @@ def _extract_expected(body: str) -> ExpectedMatchCount | None:
 
 def _is_rg_command(command: str) -> bool:
     try:
-        args = shlex.split(command, posix=True)
+        args = _split_command(command)
     except ValueError:
         return False
     return bool(args) and args[0] == "rg"
@@ -322,7 +323,50 @@ def _validate_rg_args(args: list[str], source_root: Path) -> str | None:
         error = _validate_relative_operand(operand, source_root)
         if error is not None:
             return error
+    if not _extract_rg_path_operands(args):
+        return "rg verify command must include an explicit path operand relative to source root"
     return None
+
+
+def _split_command(command: str) -> list[str]:
+    args: list[str] = []
+    current: list[str] = []
+    quote: str | None = None
+    index = 0
+
+    while index < len(command):
+        char = command[index]
+        if quote is None:
+            if char.isspace():
+                if current:
+                    args.append("".join(current))
+                    current = []
+                index += 1
+                continue
+            if char in {"'", '"'}:
+                quote = char
+                index += 1
+                continue
+            current.append(char)
+            index += 1
+            continue
+
+        if char == quote:
+            quote = None
+            index += 1
+            continue
+        if quote == '"' and char == "\\" and index + 1 < len(command) and command[index + 1] in {'"', "\\"}:
+            current.append(command[index + 1])
+            index += 2
+            continue
+        current.append(char)
+        index += 1
+
+    if quote is not None:
+        raise ValueError("No closing quotation")
+    if current:
+        args.append("".join(current))
+    return args
 
 
 def _extract_rg_path_operands(args: list[str]) -> tuple[str, ...]:
@@ -447,6 +491,11 @@ def _non_empty_line_count(text: str) -> int:
     return sum(1 for line in text.splitlines() if line.strip())
 
 
-def _sample(text: str) -> str:
+def _sample(text: str, *, capture: bool = False) -> str:
     line_count = len(text.splitlines()[:SAMPLE_LINES])
-    return f"<redacted {line_count} line(s)>" if line_count else ""
+    if not line_count:
+        return ""
+    if not capture:
+        return f"<redacted {line_count} line(s)>"
+    sample = "\n".join(text.splitlines()[:SAMPLE_LINES])
+    return sample[:SAMPLE_CHARS]

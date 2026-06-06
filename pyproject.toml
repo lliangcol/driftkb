@@ -8,6 +8,9 @@ version = "0.1.0"
 description = "Keep Markdown knowledge bases honest when code changes."
 readme = "README.md"
 requires-python = ">=3.10"
+dependencies = [
+  "PyYAML>=6.0.1",
+]
 license = "Apache-2.0"
 authors = [
   { name = "DriftKB contributors" }
@@ -45,6 +48,12 @@ Source = "https://github.com/lliangcol/driftkb"
 
 [project.scripts]
 driftkb = "driftkb.cli.main:main"
+
+[project.entry-points."driftkb.adapters"]
+generic = "driftkb.adapters.generic:GenericAdapter"
+java = "driftkb.adapters.java:JavaRegexAdapter"
+python = "driftkb.adapters.python:PythonAstAdapter"
+enterprise-java = "driftkb.adapters.enterprise_java:EnterpriseJavaAdapter"
 
 [project.optional-dependencies]
 dev = [

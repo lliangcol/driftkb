@@ -1,0 +1,7 @@
+- id: driftkb-validate
+  name: DriftKB validate
+  description: Validate DriftKB curated knowledge base freshness and verify blocks.
+  entry: driftkb validate
+  language: python
+  pass_filenames: false
+  types: [markdown]

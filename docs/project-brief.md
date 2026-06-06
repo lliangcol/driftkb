@@ -44,7 +44,9 @@ Verify blocks provide mechanical verification only. They do not prove the full b
 
 J is the lightweight semantic fingerprint layer. It extracts stable source fingerprints that can reveal meaningful code changes without requiring full static analysis.
 
-The MVP should include a generic fingerprint mechanism and a Java regex adapter as the first example adapter. Java is not special in the core design; language adapters must be configurable and replaceable.
+The MVP should include a generic fingerprint mechanism and lightweight language
+adapters. Java and Python adapters are examples; neither language is special in
+the core design. Language adapters must be configurable and replaceable.
 
 ### F / Call Graph Cache
 
@@ -58,10 +60,10 @@ The MVP includes:
 
 - K validate orchestration for Markdown KB pages.
 - X5 verify blocks.
-- Minimal J fingerprint support with generic extraction and a Java regex adapter.
+- Minimal J fingerprint support with generic, Java regex, and Python AST adapters.
 - Optional F static call graph cache reader.
 - JSON validation report output.
-- A pre-push hook that calls the generic CLI command `driftkb validate`.
+- Pre-push and pre-commit hooks that call the generic CLI command `driftkb validate`.
 - Conservative local and CI workflows for open source repositories.
 
 ## Explicitly Out Of Scope
@@ -72,7 +74,7 @@ The MVP does not include:
 - Databases or background workers.
 - AI-generated automatic edits to curated KB pages.
 - Full multi-language static analysis.
-- A complete graph provider system.
+- Running graph providers inside the default validation path.
 - Mandatory MCP, editor-agent, or private-tool integration.
 - Default pre-push gap detection.
 

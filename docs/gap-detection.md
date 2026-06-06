@@ -26,6 +26,11 @@ Use JSON output for scripts:
 driftkb gaps detect --format json
 ```
 
+Reports include a summary with scanned files, extracted candidates, candidates
+already covered by curated anchors, low-risk candidates filtered by
+`--risk high`, generated gaps, writes, and whitelist skips. If a project gets no
+gaps, check `scanned_files`, `candidates`, and `filtered_low_risk` first.
+
 ## Not a default pre-push gate
 
 Gap detection is not planned to run in the default pre-push hook. The hook should call the generic validation command:
@@ -99,7 +104,7 @@ gaps:
     - "@DS"
 ```
 
-The MVP treats a candidate as high risk when an enabled adapter extracts an annotation matching `risk_patterns`. The default list is empty so new projects can choose their own risk signals. The Java regex adapter is the first example adapter; the core command does not require Java and does not depend on MCP or private graph tools.
+The MVP treats a candidate as high risk when an enabled adapter extracts an annotation matching `risk_patterns`. The default list is empty so new projects can choose their own risk signals. The Java regex adapter is the first example adapter; the core command does not require Java and does not depend on MCP or private graph tools. The built-in Python adapter can use decorator names such as `@route` or `@task` as risk patterns when configured explicitly.
 
 ## Whitelist
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import subprocess
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -8,6 +9,9 @@ from pathlib import Path
 
 class GitError(RuntimeError):
     """Raised when a git command needed by DriftKB fails."""
+
+
+_FIXED_COMMIT_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
 
 
 @dataclass(frozen=True)
@@ -44,6 +48,17 @@ def get_head_commit(repo_root: Path) -> str:
     return result.stdout.strip()
 
 
+def is_fixed_commit_ref(value: str) -> bool:
+    return bool(_FIXED_COMMIT_RE.fullmatch(value.strip()))
+
+
+def resolve_commit(repo_root: Path, commit: str) -> str:
+    result = run_git(["rev-parse", "--verify", f"{commit}^{{commit}}"], repo_root)
+    if result.returncode != 0:
+        raise GitError(_format_git_error(f"resolve commit {commit}", result))
+    return result.stdout.strip()
+
+
 def commit_exists(repo_root: Path, commit: str) -> bool:
     result = run_git(["cat-file", "-e", f"{commit}^{{commit}}"], repo_root)
     return result.returncode == 0
@@ -57,7 +72,7 @@ def get_changed_files(
     include_worktree: bool = False,
 ) -> tuple[str, ...]:
     result = run_git(
-        ["diff", "--name-only", "--diff-filter=ACDMRT", base_commit, head, "--"],
+        ["diff", "--name-only", "--relative", "--diff-filter=ACDMRT", base_commit, head, "--"],
         repo_root,
     )
     if result.returncode != 0:
@@ -65,7 +80,7 @@ def get_changed_files(
     paths = _split_git_paths(result.stdout)
 
     if include_worktree:
-        worktree = run_git(["diff", "--name-only", "--diff-filter=ACDMRT", head, "--"], repo_root)
+        worktree = run_git(["diff", "--name-only", "--relative", "--diff-filter=ACDMRT", head, "--"], repo_root)
         if worktree.returncode != 0:
             raise GitError(_format_git_error(f"diff {head}..working tree", worktree))
         paths.extend(_split_git_paths(worktree.stdout))

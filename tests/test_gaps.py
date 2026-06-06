@@ -153,6 +153,49 @@ def test_gaps_detect_errors_on_unknown_adapter(git_repo: Path, capsys) -> None:
     assert "unknown adapter(s): java-typo" in capsys.readouterr().out
 
 
+def test_gaps_detect_supports_python_adapter(git_repo: Path, capsys) -> None:
+    config_dir = git_repo / ".driftkb"
+    config_dir.mkdir()
+    (config_dir / "config.yml").write_text(
+        """
+version: 1
+adapters:
+  enabled:
+    - python
+gaps:
+  enabled: true
+  whitelist_path: .driftkb/gap_whitelist.txt
+  risk_patterns:
+    - "@route"
+""".lstrip(),
+        encoding="utf-8",
+    )
+    source = git_repo / "src" / "payments" / "api.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        """
+def route(path):
+    def wrap(func):
+        return func
+    return wrap
+
+@route("/pay")
+def pay():
+    return "ok"
+""".lstrip(),
+        encoding="utf-8",
+    )
+    _init_and_commit(git_repo)
+
+    assert main(["gaps", "detect", "--repo-root", str(git_repo)]) == 0
+
+    output = capsys.readouterr().out
+    assert "DriftKB gaps: WARN" in output
+    assert "scanned_files: 1" in output
+    assert "candidates:" in output
+    assert "src.payments.api.pay" in output
+
+
 def _write_project(path: Path, *, adapter: str = "java") -> None:
     config_dir = path / ".driftkb"
     config_dir.mkdir()

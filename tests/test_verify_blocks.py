@@ -103,6 +103,21 @@ rg "PaymentService" src
     assert result.stderr_sample == "<redacted 1 line(s)>"
 
 
+def test_run_rg_verify_can_capture_debug_sample(monkeypatch, tmp_path: Path) -> None:
+    block = extract_verify_blocks(
+        """```verify
+rg "PaymentService" src
+# expected: match_count >= 1
+```"""
+    )[0]
+    _mock_run(monkeypatch, returncode=2, stdout="", stderr="regex parse error\n")
+
+    result = run_verify_block(block, tmp_path, capture_samples=True)
+
+    assert result.result == ValidationStatus.WARN
+    assert result.stderr_sample == "regex parse error"
+
+
 def test_run_rg_verify_warns_when_rg_is_missing(monkeypatch, tmp_path: Path) -> None:
     block = extract_verify_blocks(
         """```verify
@@ -175,6 +190,43 @@ rg --ignore-file ../ignore "PaymentService" src
 
     assert result.result == ValidationStatus.WARN
     assert "option paths" in result.message
+
+
+def test_run_rg_verify_requires_explicit_path_operand(tmp_path: Path) -> None:
+    block = extract_verify_blocks(
+        """```verify
+rg "PaymentService"
+# expected: match_count >= 1
+```"""
+    )[0]
+
+    result = run_verify_block(block, tmp_path)
+
+    assert result.result == ValidationStatus.WARN
+    assert "explicit path operand" in result.message
+
+
+def test_run_rg_verify_accepts_windows_style_relative_operand(monkeypatch, tmp_path: Path) -> None:
+    block = extract_verify_blocks(
+        """```verify
+rg "PaymentService" src\\payment
+# expected: match_count >= 1
+```"""
+    )[0]
+    seen = {}
+
+    def fake_run(args, cwd, text, capture_output, timeout, check):
+        seen["args"] = args
+        return subprocess.CompletedProcess(
+            args=args, returncode=0, stdout="src/payment/service.py:PaymentService\n", stderr=""
+        )
+
+    monkeypatch.setattr("driftkb.verify.blocks.subprocess_run", fake_run)
+
+    result = run_verify_block(block, tmp_path)
+
+    assert result.result == ValidationStatus.PASS
+    assert seen["args"][-1] == "src\\payment"
 
 
 def test_run_rg_verify_rejects_files_mode_paths_outside_source_root(monkeypatch, tmp_path: Path) -> None:

@@ -53,6 +53,37 @@ def test_hooks_install_pre_push_force_strict_overwrites_existing_hook(tmp_path: 
     assert f"overwrote pre-push at {hook_path}" in capsys.readouterr().out
 
 
+def test_hooks_install_pre_commit_supports_validate_options(tmp_path: Path, capsys) -> None:
+    _git(tmp_path, "init")
+
+    exit_code = main(
+        [
+            "hooks",
+            "install",
+            "pre-commit",
+            "--repo-root",
+            str(tmp_path),
+            "--config",
+            ".driftkb/custom.yml",
+            "--profile",
+            "enterprise-java",
+            "--no-verify",
+            "--format",
+            "json",
+            "--strict",
+        ]
+    )
+
+    hook_path = tmp_path / ".git" / "hooks" / "pre-commit"
+    assert exit_code == 0
+    assert hook_path.read_text(encoding="utf-8") == (
+        "#!/bin/sh\n"
+        "set -e\n"
+        "driftkb validate --config .driftkb/custom.yml --profile enterprise-java --no-verify --format json --strict\n"
+    )
+    assert f"installed pre-commit at {hook_path}" in capsys.readouterr().out
+
+
 def test_hooks_install_pre_push_supports_linked_worktree(tmp_path: Path, capsys) -> None:
     main_repo = tmp_path / "main"
     worktree = tmp_path / "linked"

@@ -17,8 +17,9 @@ The MVP includes:
 
 - `generic`: computes a deterministic SHA-256 hash for any supported text or binary file.
 - `java` / `java-regex`: a minimal Java-oriented regex adapter.
+- `python` / `python-ast`: a minimal Python AST adapter.
 
-The Java adapter is an example adapter, not a core assumption. Future adapters may cover Python, Go, TypeScript, or other ecosystems.
+The Java and Python adapters are examples, not core assumptions. Future adapters may cover Go, TypeScript, or other ecosystems.
 
 The `enterprise-java` adapter is opt-in through config or `--profile enterprise-java`. It
 wraps the Java regex adapter and adds enterprise-oriented risk fingerprints for
@@ -74,6 +75,24 @@ Limitations:
 - It can miss unusual formatting, nested declarations, comments that look like code, and complex generic signatures.
 - It should be treated as preview evidence for reducing obvious false positives, not as semantic proof.
 
+## Python AST adapter preview
+
+The Python adapter supports `.py` files and uses Python's standard `ast`
+module. It records:
+
+- module names derived from paths
+- classes
+- functions
+- class methods
+- imports
+- decorators as annotations, for example `@route`
+
+Limitations:
+
+- It does not execute imports or resolve dynamic decorators.
+- It does not infer framework routes beyond decorator names.
+- It should be treated as lightweight evidence, not full semantic proof.
+
 ## Enterprise Java adapter
 
 Enable Enterprise Java extraction explicitly:
@@ -116,3 +135,22 @@ driftkb fingerprints update --kb-file docs/kb/curated/example.md
 `driftkb validate` never updates snapshots automatically. If a changed source file has no snapshot, or extraction fails, DriftKB remains conservative and reports the stale match.
 
 Fingerprints reduce false positives. They are not a complete semantic proof that a KB page is correct.
+
+Snapshots include `generated_at_commit`, `kb_path`,
+`kb_last_verified_commit`, and whether the source changed after the KB baseline.
+`driftkb validate` only trusts a matching snapshot when those fields prove that
+the snapshot belongs to the same KB baseline. Use
+`driftkb fingerprints update --all --accept-current` only after human review to
+advance curated KB pages to the current `HEAD`.
+
+## Adapter plugins
+
+External packages can expose adapters through Python entry points:
+
+```toml
+[project.entry-points."driftkb.adapters"]
+my-language = "my_package.driftkb_adapter:MyAdapter"
+```
+
+An adapter must provide `supports(path)` and `extract(path, source_root)` and
+return `driftkb.adapters.base.Fingerprint`.

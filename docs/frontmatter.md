@@ -6,7 +6,7 @@ Example:
 
 ```yaml
 ---
-last_verified_commit: abc123
+last_verified_commit: 0123456789abcdef0123456789abcdef01234567
 source_globs:
   - "src/payment/**/*.py"
 stale_policy: warn
@@ -24,11 +24,16 @@ adapters:
 
 ## `last_verified_commit`
 
-The commit at which the KB page was last manually reviewed against the source it describes.
+The fixed commit SHA at which the KB page was last manually reviewed against
+the source it describes. Do not use moving refs such as `HEAD`, branch names, or
+tags. DriftKB treats moving refs as untrusted and falls back to a conservative
+source scan because they can hide drift after a source commit.
 
 ## `source_globs`
 
-Repository-relative glob patterns for source files covered by the KB page.
+Glob patterns for source files covered by the KB page. They are evaluated
+relative to the configured `sources.root` after repository-level
+`sources.include` and `sources.exclude` filters are applied.
 
 ## `stale_policy`
 

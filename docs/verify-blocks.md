@@ -60,6 +60,22 @@ For safety, DriftKB runs `rg` with config loading disabled, rejects `rg`
 preprocessors, rejects symlink-following flags, and requires explicit path
 operands to stay inside the configured source root.
 
+Good:
+
+```text
+rg -n "PaymentService" src/payment tests/payment
+```
+
+Rejected because it would scan the whole source root:
+
+```text
+rg -n "PaymentService"
+```
+
+Use forward slashes in examples for portability. Windows-style relative
+operands are accepted, but POSIX-style paths are easier to review across
+platforms.
+
 ## Safety
 
 Verify blocks execute commands from repository Markdown files. Treat them like
@@ -92,4 +108,11 @@ Tune the per-command timeout:
 
 ```text
 driftkb validate --verify-timeout 5
+```
+
+When debugging a failing verify block, include bounded stdout/stderr samples in
+the text and JSON report:
+
+```text
+driftkb validate --verify-debug-samples
 ```

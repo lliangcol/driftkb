@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+try:
+    import yaml
+except ImportError:  # pragma: no cover - fallback for source checkouts without optional runtime deps
+    yaml = None
 
 from driftkb.core.models import ProfileConfig
 from driftkb.profiles import DEFAULT_PROFILE, get_profile, get_profile_defaults
@@ -37,6 +43,7 @@ DEFAULT_CONFIG_DATA: dict[str, Any] = {
         "enabled": True,
         "allow_shell": False,
         "timeout_seconds": 10,
+        "capture_samples": False,
     },
     "graph": {
         "cache_path": ".driftkb/call_graph_cache.json",
@@ -58,6 +65,20 @@ DEFAULT_CONFIG_DATA: dict[str, Any] = {
 
 class ConfigError(ValueError):
     """Raised when `.driftkb/config.yml` cannot be read or parsed."""
+
+
+if yaml is not None:
+
+    class _DriftKBSafeLoader(yaml.SafeLoader):
+        pass
+
+    _DriftKBSafeLoader.yaml_implicit_resolvers = deepcopy(yaml.SafeLoader.yaml_implicit_resolvers)
+    for _first_char, _resolvers in list(_DriftKBSafeLoader.yaml_implicit_resolvers.items()):
+        _DriftKBSafeLoader.yaml_implicit_resolvers[_first_char] = [
+            (tag, regexp) for tag, regexp in _resolvers if tag != "tag:yaml.org,2002:timestamp"
+        ]
+else:
+    _DriftKBSafeLoader = None
 
 
 @dataclass(frozen=True)
@@ -91,6 +112,7 @@ class VerifyConfig:
     enabled: bool = True
     allow_shell: bool = False
     timeout_seconds: float = 10
+    capture_samples: bool = False
 
 
 @dataclass(frozen=True)
@@ -175,7 +197,7 @@ def load_config(repo_root: Path, config_path: Path | None = None, profile: str |
     )
 
     if config_path.exists():
-        raw = parse_simple_yaml(config_path.read_text(encoding="utf-8"))
+        raw = parse_yaml_mapping(config_path.read_text(encoding="utf-8"), source=str(config_path))
         if not isinstance(raw, dict):
             raise ConfigError(f"{config_path} must contain a YAML mapping.")
     else:
@@ -234,6 +256,7 @@ def load_config(repo_root: Path, config_path: Path | None = None, profile: str |
             enabled=_bool(verify, "enabled"),
             allow_shell=_bool(verify, "allow_shell"),
             timeout_seconds=_positive_float(verify, "timeout_seconds"),
+            capture_samples=_bool(verify, "capture_samples"),
         ),
         graph=GraphConfig(
             cache_path=_resolve_repo_path(repo_root, _string(graph, "cache_path"), "graph.cache_path"),
@@ -316,6 +339,20 @@ def parse_simple_yaml(text: str) -> dict[str, Any]:
         stack.append((indent, next_container))
 
     return root
+
+
+def parse_yaml_mapping(text: str, *, source: str = "YAML") -> dict[str, Any]:
+    if yaml is None:
+        return parse_simple_yaml(text)
+    try:
+        loaded = yaml.load(text, Loader=_DriftKBSafeLoader)
+    except yaml.YAMLError as exc:
+        raise ConfigError(f"Invalid YAML in {source}: {exc}") from exc
+    if loaded is None:
+        return {}
+    if not isinstance(loaded, dict):
+        raise ConfigError(f"{source} must contain a YAML mapping.")
+    return loaded
 
 
 def dump_simple_yaml(data: dict[str, Any], indent: int = 0) -> str:

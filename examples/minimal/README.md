@@ -8,15 +8,14 @@ docs/kb/curated/payment.md
 src/payment.py
 ```
 
-Run validation from this directory inside a normal git checkout with a valid
-`HEAD` commit:
+Run validation from this directory inside a normal git checkout:
 
 ```text
 driftkb validate
 ```
 
-The first run should pass. The KB uses `last_verified_commit: HEAD`, so the
-example works inside a cloned checkout without baking in a private commit hash.
+The first run should pass. The KB uses a fixed `last_verified_commit` SHA from
+this repository so validation cannot be hidden by a moving ref such as `HEAD`.
 
 Now edit `src/payment.py` and change:
 

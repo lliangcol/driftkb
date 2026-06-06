@@ -35,8 +35,8 @@ Expected output:
 DriftKB: PASS
 ```
 
-The example KB page uses `last_verified_commit: HEAD`, so it expects a normal
-git checkout with a valid `HEAD` commit.
+The example KB page uses a fixed `last_verified_commit` SHA. DriftKB warns on
+moving refs such as `HEAD` because they can hide drift after source commits.
 
 ## Create Drift
 
@@ -73,6 +73,8 @@ driftkb gaps detect --dry-run
 
 ## Common Failures
 
+- `last_verified_commit` is `HEAD` or a branch name: replace it with a fixed
+  commit SHA, usually from `git rev-parse HEAD` after human review.
 - `git` cannot find `HEAD`: commit the example checkout or run in a normal clone.
 - `rg` is missing: install ripgrep before running verify blocks.
 - Validation writes a report you do not want: pass `--no-write-report`.

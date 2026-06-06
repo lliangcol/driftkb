@@ -129,6 +129,8 @@ def _ensure_fingerprint_sources_clean(
             get_changed_files(config.repo_root, head_commit, include_worktree=True),
             config.repo_root,
             config.sources.root,
+            include=config.sources.include,
+            exclude=config.sources.exclude,
         )
     except GitError as exc:
         raise PromoteError(str(exc)) from exc

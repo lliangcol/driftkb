@@ -26,7 +26,7 @@ DriftKB validates curated KB pages using:
 - frontmatter that declares covered source paths and policies;
 - git diff context, including staged, unstaged, and untracked source changes;
 - constrained `rg` verify blocks embedded in Markdown;
-- lightweight source fingerprints;
+- lightweight source fingerprints bound to the KB review baseline;
 - optional static call graph cache propagation;
 - text and JSON reports for hooks, CI, and humans.
 
@@ -112,12 +112,17 @@ Update fingerprint snapshots explicitly:
 
 ```text
 driftkb fingerprints update --all
+driftkb fingerprints update --all --accept-current
 ```
 
-Install a pre-push hook:
+Use `--accept-current` only after human review. It updates selected curated KB
+files to the current `HEAD` and writes snapshots tied to that baseline.
+
+Install a pre-push or pre-commit hook:
 
 ```text
 driftkb hooks install pre-push
+driftkb hooks install pre-commit --strict --no-verify
 ```
 
 The default hook calls the generic CLI command `driftkb validate`. Gap detection
@@ -163,7 +168,10 @@ rg "class CheckoutService|def create_order" src/checkout tests/checkout
 ````
 
 MVP verify blocks only execute constrained `rg` commands. Non-`rg` commands are
-reported as `WARN` unless verify execution is disabled.
+reported as `WARN` unless verify execution is disabled. `rg` commands must use
+explicit path operands relative to the source root. Use
+`driftkb validate --verify-debug-samples` when you need bounded stdout/stderr
+samples in the JSON report while debugging a failing block.
 
 ## Configuration
 
@@ -182,6 +190,7 @@ Useful docs:
 - [Gap detection](docs/gap-detection.md)
 - [Profiles](docs/profiles.md)
 - [Call graph cache](docs/call-graph-cache.md)
+- [CI](docs/ci.md)
 - [Roadmap](docs/roadmap.md)
 
 ## Security
@@ -199,10 +208,12 @@ See [SECURITY.md](SECURITY.md) for details.
 
 ## Status
 
-Current MVP features include config loading, curated KB frontmatter scanning,
-git-diff stale checks, constrained `rg` verify blocks, fingerprint snapshots,
-optional static call graph cache warning propagation, advisory gap detection,
-generated stub promotion, JSON reports, and pre-push hook installation.
+Current features include config loading, curated KB frontmatter scanning,
+git-diff stale checks, constrained `rg` verify blocks, baseline-bound
+fingerprint snapshots, built-in generic/Java/Python adapters, adapter plugin
+entry points, optional static call graph cache warning propagation, advisory gap
+detection, generated stub promotion, JSON reports, and pre-push/pre-commit hook
+installation.
 
 ## Contributing
 

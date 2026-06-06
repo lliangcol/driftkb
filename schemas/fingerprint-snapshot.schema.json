@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lliangcol/driftkb/schemas/fingerprint-snapshot.schema.json",
+  "title": "DriftKB fingerprint snapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "adapter", "file", "symbols", "annotations", "imports", "raw_hash", "semantic_hash", "metadata"],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 2 },
+    "adapter": { "type": "string" },
+    "file": { "type": "string" },
+    "symbols": { "$ref": "#/$defs/stringList" },
+    "annotations": { "$ref": "#/$defs/stringList" },
+    "imports": { "$ref": "#/$defs/stringList" },
+    "raw_hash": { "type": ["string", "null"] },
+    "semantic_hash": { "type": ["string", "null"] },
+    "metadata": { "type": "object" },
+    "generated_at_commit": { "type": "string" },
+    "kb_path": { "type": "string" },
+    "kb_last_verified_commit": { "type": "string" },
+    "source_changed_since_kb_last_verified": { "type": "boolean" }
+  },
+  "$defs": {
+    "stringList": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

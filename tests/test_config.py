@@ -22,6 +22,7 @@ def test_create_default_config_writes_expected_layout(tmp_path: Path) -> None:
     assert '    - "src/**/*"' in config_text
     assert '    - "**/.git/**"' in config_text
     assert "allow_shell: false" in config_text
+    assert "capture_samples: false" in config_text
     assert "retrieval_policy:" in config_text
     assert "path: RETRIEVAL_POLICY.json" in config_text
     assert "snapshot_dir: .driftkb/validation/fingerprints" in config_text
@@ -54,6 +55,7 @@ verify:
     assert config.sources.exclude == ("**/.git/**",)
     assert config.verify.enabled is False
     assert config.verify.allow_shell is False
+    assert config.verify.capture_samples is False
     assert config.fingerprints.enabled is True
     assert config.fingerprints.snapshot_dir == (tmp_path / ".driftkb" / "validation" / "fingerprints").resolve()
     assert config.adapters.enabled == ("generic",)
@@ -163,6 +165,26 @@ gaps:
     config = load_config(tmp_path)
 
     assert config.gaps.risk_patterns == ()
+
+
+def test_load_config_accepts_standard_yaml_inline_sequences(tmp_path: Path) -> None:
+    config_path = tmp_path / ".driftkb" / "config.yml"
+    config_path.parent.mkdir()
+    config_path.write_text(
+        """
+version: 1
+sources:
+  include: ["app/**/*.py", "lib/**/*.py"]
+verify:
+  capture_samples: true
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    config = load_config(tmp_path)
+
+    assert config.sources.include == ("app/**/*.py", "lib/**/*.py")
+    assert config.verify.capture_samples is True
 
 
 def test_load_config_rejects_quoted_boolean(tmp_path: Path) -> None:

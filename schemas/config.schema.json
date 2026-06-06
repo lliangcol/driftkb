@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lliangcol/driftkb/schemas/config.schema.json",
+  "title": "DriftKB config",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["version"],
+  "properties": {
+    "version": { "type": "integer", "const": 1 },
+    "profile": { "type": "string" },
+    "kb": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "curated_dir": { "type": "string" },
+        "generated_dir": { "type": "string" },
+        "validation_dir": { "type": "string" }
+      }
+    },
+    "sources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "root": { "type": "string" },
+        "include": { "$ref": "#/$defs/stringList" },
+        "exclude": { "$ref": "#/$defs/stringList" }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default_stale_policy": { "enum": ["warn", "fail", "skip", "warn_on_source_change", "fail_on_source_change"] },
+        "report_path": { "type": "string" }
+      }
+    },
+    "verify": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "allow_shell": { "type": "boolean" },
+        "timeout_seconds": { "type": "number", "exclusiveMinimum": 0 },
+        "capture_samples": { "type": "boolean" }
+      }
+    },
+    "graph": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cache_path": { "type": "string" },
+        "kb_section_map_path": { "type": ["string", "null"] }
+      }
+    },
+    "fingerprints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "snapshot_dir": { "type": "string" }
+      }
+    },
+    "adapters": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "$ref": "#/$defs/stringList" }
+      }
+    },
+    "gaps": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "whitelist_path": { "type": "string" },
+        "risk_patterns": { "$ref": "#/$defs/stringList" }
+      }
+    }
+  },
+  "$defs": {
+    "stringList": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

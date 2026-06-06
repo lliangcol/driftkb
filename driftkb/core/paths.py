@@ -17,6 +17,18 @@ def path_matches_any(path: str | Path, patterns: tuple[str, ...] | list[str]) ->
     return any(glob_matches(normalized, pattern) for pattern in patterns)
 
 
+def repo_path_matches_source_filters(
+    repo_relative_path: str | Path,
+    *,
+    include: tuple[str, ...] | list[str],
+    exclude: tuple[str, ...] | list[str],
+) -> bool:
+    normalized = normalize_posix_path(repo_relative_path)
+    if exclude and path_matches_any(normalized, exclude):
+        return False
+    return not include or path_matches_any(normalized, include)
+
+
 def glob_matches(path: str, pattern: str) -> bool:
     normalized_pattern = normalize_posix_path(pattern)
     return _match_segments(
@@ -43,10 +55,15 @@ def repo_paths_relative_to_source_root(
     repo_relative_paths: tuple[str, ...],
     repo_root: Path,
     source_root: Path,
+    *,
+    include: tuple[str, ...] | list[str] = (),
+    exclude: tuple[str, ...] | list[str] = (),
 ) -> tuple[str, ...]:
     normalized: list[str] = []
     resolved_source_root = source_root.resolve()
     for repo_path in repo_relative_paths:
+        if not repo_path_matches_source_filters(repo_path, include=include, exclude=exclude):
+            continue
         absolute = (repo_root / repo_path).resolve()
         try:
             normalized.append(absolute.relative_to(resolved_source_root).as_posix())

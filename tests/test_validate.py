@@ -210,6 +210,51 @@ def test_validate_missing_last_verified_commit_warns(git_repo: Path, capsys) -> 
     assert "last_verified_commit is missing" in output
 
 
+def test_validate_treats_head_baseline_as_untrusted(git_repo: Path, capsys) -> None:
+    _baseline_repo(git_repo, stale_policy="fail")
+    kb_path = git_repo / "docs" / "kb" / "curated" / "payment.md"
+    text = kb_path.read_text(encoding="utf-8")
+    text = text.replace("last_verified_commit: ", "last_verified_commit: HEAD # old ")
+    kb_path.write_text(text, encoding="utf-8")
+    _commit_all(git_repo, "use moving baseline")
+
+    exit_code = main(["validate", "--repo-root", str(git_repo), "--no-write-report", "--no-verify"])
+
+    output = capsys.readouterr().out
+    assert exit_code == 1
+    assert "last_verified_commit must be a fixed commit SHA" in output
+    assert "source changed since last_verified_commit" in output
+
+
+def test_validate_applies_source_filters_to_git_diff(git_repo: Path, capsys) -> None:
+    _baseline_repo(git_repo, stale_policy="fail", source_glob="src/**/*.py")
+    config = git_repo / ".driftkb" / "config.yml"
+    config.parent.mkdir()
+    config.write_text(
+        """
+version: 1
+sources:
+  root: .
+  include:
+    - "src/**/*"
+  exclude:
+    - "src/generated/**"
+""".lstrip(),
+        encoding="utf-8",
+    )
+    generated = git_repo / "src" / "generated" / "ignored.py"
+    generated.parent.mkdir(parents=True)
+    generated.write_text("def generated():\n    return 1\n", encoding="utf-8")
+    _commit_all(git_repo, "change excluded generated source")
+
+    exit_code = main(["validate", "--repo-root", str(git_repo), "--no-write-report", "--no-verify"])
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "DriftKB: PASS" in output
+    assert "src/generated/ignored.py" not in output
+
+
 def test_validate_invalid_frontmatter_fails(git_repo: Path, capsys) -> None:
     _init_git(git_repo)
     (git_repo / "src" / "payment").mkdir(parents=True)

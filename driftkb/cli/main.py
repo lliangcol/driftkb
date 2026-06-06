@@ -53,6 +53,11 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="SECONDS",
         help="Timeout per verify block command. Defaults to 10 seconds.",
     )
+    validate_parser.add_argument(
+        "--verify-debug-samples",
+        action="store_true",
+        help="Include bounded verify stdout/stderr samples in reports instead of redacted line counts.",
+    )
     validate_parser.add_argument("--format", choices=["text", "json"], default="text", help="Output format.")
     validate_parser.add_argument("--strict", action="store_true", help="Return exit code 1 for WARN as well as FAIL.")
 
@@ -122,15 +127,30 @@ def build_parser() -> argparse.ArgumentParser:
     fingerprints_update_parser.add_argument(
         "--all", action="store_true", help="Update snapshots for all curated KB files."
     )
+    fingerprints_update_parser.add_argument(
+        "--accept-current",
+        action="store_true",
+        help="After human review, update selected KB last_verified_commit to current HEAD before writing snapshots.",
+    )
 
     hooks_parser = subparsers.add_parser("hooks", help="Hook management commands.")
     hooks_subparsers = hooks_parser.add_subparsers(dest="hooks_command")
     hooks_install_parser = hooks_subparsers.add_parser("install", help="Install repository hooks.")
-    hooks_install_parser.add_argument("hook", choices=["pre-push"], help="Hook to install.")
+    hooks_install_parser.add_argument("hook", choices=["pre-commit", "pre-push"], help="Hook to install.")
     hooks_install_parser.add_argument(
         "--repo-root", type=Path, default=Path("."), help="Repository root. Defaults to current directory."
     )
     hooks_install_parser.add_argument("--force", action="store_true", help="Overwrite an existing hook.")
+    hooks_install_parser.add_argument("--config", type=Path, help="Validate with this DriftKB config path.")
+    hooks_install_parser.add_argument(
+        "--profile", choices=available_profiles(), help="Validate with this profile override."
+    )
+    hooks_install_parser.add_argument(
+        "--no-verify", action="store_true", help="Install a hook that skips verify blocks."
+    )
+    hooks_install_parser.add_argument(
+        "--format", choices=["text", "json"], default="text", help="Validate output format used by the hook."
+    )
     hooks_install_parser.add_argument(
         "--strict", action="store_true", help="Install a hook that fails on WARN as well as FAIL."
     )
@@ -195,6 +215,7 @@ def run_validate(args: argparse.Namespace) -> int:
             report_path=args.report,
             verify_enabled=False if args.no_verify else None,
             verify_timeout_seconds=args.verify_timeout,
+            verify_capture_samples=True if args.verify_debug_samples else None,
         )
         report = validate_kb(config)
         if not args.no_write_report:
@@ -220,7 +241,16 @@ def run_validate(args: argparse.Namespace) -> int:
 
 def run_hooks_install(args: argparse.Namespace) -> int:
     try:
-        result = install_hook(args.repo_root, args.hook, force=args.force, strict=args.strict)
+        result = install_hook(
+            args.repo_root,
+            args.hook,
+            force=args.force,
+            strict=args.strict,
+            config=args.config,
+            profile=args.profile,
+            no_verify=args.no_verify,
+            output_format=args.format,
+        )
     except HookInstallError as exc:
         print(f"DriftKB: ERROR\nreason: {exc}")
         return 2
@@ -239,13 +269,20 @@ def run_fingerprints_update(args: argparse.Namespace) -> int:
         return 2
     try:
         config = load_config(args.repo_root, args.config, profile=args.profile)
-        result = update_fingerprints(config, kb_file=args.kb_file, all_kb=args.all)
+        result = update_fingerprints(
+            config,
+            kb_file=args.kb_file,
+            all_kb=args.all,
+            accept_current=args.accept_current,
+        )
     except (ConfigError, OSError, ValueError) as exc:
         print(f"DriftKB: ERROR\nreason: {exc}")
         return 2
     print(f"updated {result.updated} fingerprint snapshot(s)")
     if result.skipped:
         print(f"skipped {result.skipped} file(s)")
+    if result.accepted:
+        print(f"accepted current HEAD for {result.accepted} KB file(s)")
     return 0
 
 
@@ -338,6 +375,10 @@ def format_gap_report(result, repo_root: Path, *, write: bool) -> str:
         "DriftKB gaps: PASS" if not result.gaps else "DriftKB gaps: WARN",
         f"checked_at_commit: {result.checked_at_commit or 'unknown'}",
         f"mode: {'write' if write else 'dry-run'}",
+        f"scanned_files: {result.scanned_files}",
+        f"candidates: {result.candidates}",
+        f"covered: {result.covered}",
+        f"filtered_low_risk: {result.filtered_low_risk}",
         f"gaps: {len(result.gaps)}",
         f"written: {len(result.written)}",
         f"skipped_whitelisted: {len(result.skipped_whitelisted)}",

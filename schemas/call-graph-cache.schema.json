@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lliangcol/driftkb/schemas/call-graph-cache.schema.json",
+  "title": "DriftKB call graph cache",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": ["schema_version", "nodes"],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "nodes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "callers": { "$ref": "#/$defs/stringList" },
+              "callees": { "$ref": "#/$defs/stringList" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": ["schema_version", "edges"],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "anyOf": [
+              { "required": ["caller", "callee"] },
+              { "required": ["from", "to"] }
+            ],
+            "properties": {
+              "caller": { "type": "string" },
+              "callee": { "type": "string" },
+              "from": { "type": "string" },
+              "to": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "stringList": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

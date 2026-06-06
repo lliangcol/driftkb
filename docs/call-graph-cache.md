@@ -39,7 +39,10 @@ Fields:
 - `callers`: symbols that call the keyed symbol.
 - `callees`: symbols called by the keyed symbol.
 
-If the cache is missing or invalid, `driftkb validate` continues without graph propagation and records WARN-level graph metadata in the JSON report.
+If the cache is missing or invalid, `driftkb validate` continues without graph
+propagation. When any curated KB opts into propagation, cache unavailability is
+also emitted as a visible `WARN` issue so CI and hook output do not hide the
+disabled propagation path.
 
 ## Frontmatter
 
@@ -70,3 +73,8 @@ Any graph provider can generate this file:
 - custom script
 
 The cache file should be committed or generated in CI before `driftkb validate` runs. Use `driftkb graph anchors` to print the curated KB `anchor_symbols` JSON array that an external generator can use as its input list.
+
+Python packages that generate graph caches can also use the optional
+`driftkb.graph_providers` entry point group. Providers should implement the
+protocol in `driftkb.graph.provider.GraphProvider`: generate a static cache at a
+requested output path and leave validation to DriftKB core.

@@ -44,6 +44,16 @@ def test_validate_propagates_callers_from_cache(git_repo: Path, capsys) -> None:
     assert propagated["metadata"]["related_anchor_symbol"] == "api.PaymentController"
 
 
+def test_validate_warns_when_propagation_enabled_but_cache_missing(git_repo: Path, capsys) -> None:
+    _baseline_graph_repo(git_repo)
+
+    assert main(["validate", "--repo-root", str(git_repo), "--no-write-report", "--no-verify"]) == 0
+
+    output = capsys.readouterr().out
+    assert "DriftKB: WARN" in output
+    assert "call graph cache file is missing" in output
+
+
 def test_validate_converts_edges_call_graph_cache(git_repo: Path, capsys) -> None:
     _baseline_graph_repo(git_repo)
     cache_path = git_repo / ".driftkb" / "call_graph_cache.json"

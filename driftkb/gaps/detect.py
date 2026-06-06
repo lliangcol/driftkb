@@ -42,6 +42,10 @@ class GapDetectionResult:
     written: tuple[Path, ...]
     skipped_whitelisted: tuple[GapCandidate, ...]
     warnings: tuple[str, ...] = ()
+    scanned_files: int = 0
+    candidates: int = 0
+    covered: int = 0
+    filtered_low_risk: int = 0
 
 
 def detect_gaps(config: DriftKBConfig, *, write: bool = False, risk_filter: RiskFilter = "high") -> GapDetectionResult:
@@ -63,15 +67,20 @@ def detect_gaps(config: DriftKBConfig, *, write: bool = False, risk_filter: Risk
     anchors.update(_section_map_anchor_symbols(config, warnings))
     whitelist = load_gap_whitelist(config.gaps.whitelist_path)
 
-    candidates = _scan_candidates(config, warnings)
+    scan = _scan_candidates(config, warnings)
+    candidates = scan.candidates
     gaps: list[Gap] = []
     skipped_whitelisted: list[GapCandidate] = []
     used_output_paths: set[Path] = set()
+    covered = 0
+    filtered_low_risk = 0
 
     for candidate in candidates:
         if risk_filter == "high" and candidate.risk != "high":
+            filtered_low_risk += 1
             continue
         if candidate.symbol in anchors:
+            covered += 1
             continue
         if _is_whitelisted(candidate.symbol, whitelist):
             skipped_whitelisted.append(candidate)
@@ -112,6 +121,10 @@ def detect_gaps(config: DriftKBConfig, *, write: bool = False, risk_filter: Risk
         written=tuple(written),
         skipped_whitelisted=tuple(skipped_whitelisted),
         warnings=tuple(warnings),
+        scanned_files=scan.scanned_files,
+        candidates=len(candidates),
+        covered=covered,
+        filtered_low_risk=filtered_low_risk,
     )
 
 
@@ -187,6 +200,15 @@ def result_to_json(result: GapDetectionResult, repo_root: Path) -> str:
     payload: dict[str, Any] = {
         "enabled": result.enabled,
         "checked_at_commit": result.checked_at_commit,
+        "summary": {
+            "scanned_files": result.scanned_files,
+            "candidates": result.candidates,
+            "covered": result.covered,
+            "filtered_low_risk": result.filtered_low_risk,
+            "gaps": len(result.gaps),
+            "written": len(result.written),
+            "skipped_whitelisted": len(result.skipped_whitelisted),
+        },
         "gaps": [
             {
                 "symbol": gap.candidate.symbol,
@@ -205,15 +227,23 @@ def result_to_json(result: GapDetectionResult, repo_root: Path) -> str:
     return json.dumps(payload, indent=2, sort_keys=True)
 
 
-def _scan_candidates(config: DriftKBConfig, warnings: list[str]) -> tuple[GapCandidate, ...]:
+@dataclass(frozen=True)
+class CandidateScan:
+    candidates: tuple[GapCandidate, ...]
+    scanned_files: int
+
+
+def _scan_candidates(config: DriftKBConfig, warnings: list[str]) -> CandidateScan:
     adapters = build_adapters(config.adapters.enabled)
     by_symbol: dict[str, GapCandidate] = {}
+    scanned_files = 0
 
     for source_path in all_source_files(config):
         absolute = config.sources.root / source_path
         adapter = next((item for item in adapters if item.supports(absolute)), None)
         if adapter is None:
             continue
+        scanned_files += 1
         try:
             fingerprint = adapter.extract(absolute, config.sources.root)
         except (OSError, UnicodeError, ValueError) as exc:
@@ -222,7 +252,10 @@ def _scan_candidates(config: DriftKBConfig, warnings: list[str]) -> tuple[GapCan
         for candidate in _candidates_from_fingerprint(fingerprint, config.gaps.risk_patterns):
             by_symbol.setdefault(candidate.symbol, candidate)
 
-    return tuple(by_symbol[symbol] for symbol in sorted(by_symbol))
+    return CandidateScan(
+        candidates=tuple(by_symbol[symbol] for symbol in sorted(by_symbol)),
+        scanned_files=scanned_files,
+    )
 
 
 def _candidates_from_fingerprint(fingerprint: Fingerprint, risk_patterns: tuple[str, ...]) -> tuple[GapCandidate, ...]:

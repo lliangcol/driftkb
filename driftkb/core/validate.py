@@ -7,14 +7,22 @@ from typing import Any
 from driftkb.adapters.registry import build_adapters
 from driftkb.core.config import ConfigError, DriftKBConfig
 from driftkb.core.frontmatter import FrontmatterError, normalize_frontmatter_aliases, parse_markdown_frontmatter
-from driftkb.core.git import GitError, commit_exists, get_changed_files, get_head_commit
+from driftkb.core.git import (
+    GitError,
+    commit_exists,
+    get_changed_files,
+    get_head_commit,
+    is_fixed_commit_ref,
+    resolve_commit,
+)
 from driftkb.core.models import KBFile, ValidationIssue, ValidationResult, ValidationStatus
 from driftkb.core.paths import (
     path_matches_any,
+    repo_path_matches_source_filters,
     repo_paths_relative_to_source_root,
     to_posix_relative,
 )
-from driftkb.fingerprints.snapshots import compare_fingerprint, load_snapshot
+from driftkb.fingerprints.snapshots import FingerprintSnapshot, compare_fingerprint, load_snapshot_record
 from driftkb.graph.cache import CallGraphCache, load_graph_cache
 from driftkb.profiles.validators import validate_profile_rules
 from driftkb.verify.blocks import extract_verify_blocks, run_verify_block
@@ -33,6 +41,7 @@ def apply_validate_overrides(
     verify_enabled: bool | None = None,
     allow_shell_verify: bool | None = None,
     verify_timeout_seconds: float | None = None,
+    verify_capture_samples: bool | None = None,
 ) -> DriftKBConfig:
     repo_root = config.repo_root
     if kb_dir is not None:
@@ -50,6 +59,8 @@ def apply_validate_overrides(
         config = replace(config, verify=replace(config.verify, allow_shell=allow_shell_verify))
     if verify_timeout_seconds is not None:
         config = replace(config, verify=replace(config.verify, timeout_seconds=verify_timeout_seconds))
+    if verify_capture_samples is not None:
+        config = replace(config, verify=replace(config.verify, capture_samples=verify_capture_samples))
     return config
 
 
@@ -112,14 +123,10 @@ def validate_kb(config: DriftKBConfig) -> ValidationResult:
             )
             continue
 
-        baseline_exists = commit_exists(config.repo_root, kb_file.last_verified_commit)
-        if baseline_exists:
+        baseline_commit = _fixed_last_verified_commit(kb_file, config, warnings)
+        if baseline_commit is not None:
             try:
-                changed_files = repo_paths_relative_to_source_root(
-                    get_changed_files(config.repo_root, kb_file.last_verified_commit, include_worktree=True),
-                    config.repo_root,
-                    config.sources.root,
-                )
+                changed_files = changed_source_files(config, baseline_commit)
             except GitError as exc:
                 warnings.append(
                     _issue(
@@ -131,18 +138,11 @@ def validate_kb(config: DriftKBConfig) -> ValidationResult:
                 )
                 changed_files = all_source_files(config)
         else:
-            warnings.append(
-                _issue(
-                    "last_verified_commit_missing_in_git",
-                    "last_verified_commit does not exist in this repository; using a conservative source scan",
-                    kb_file,
-                    ValidationStatus.WARN,
-                )
-            )
             changed_files = all_source_files(config)
 
         candidate_paths = tuple(path for path in changed_files if path_matches_any(path, kb_file.source_globs))
-        matched_paths = _paths_without_equal_fingerprint_snapshots(candidate_paths, kb_file, config)
+        matched_paths, fingerprint_issues = _paths_without_equal_fingerprint_snapshots(candidate_paths, kb_file, config)
+        warnings.extend(fingerprint_issues)
         matched_paths, reviewed_issues = _apply_reviewed_path_exemptions(matched_paths, kb_file)
         warnings.extend(reviewed_issues)
         if not matched_paths:
@@ -162,6 +162,7 @@ def validate_kb(config: DriftKBConfig) -> ValidationResult:
         else:
             warnings.append(issue)
 
+    warnings.extend(_graph_cache_warnings(kb_files, graph_cache))
     warnings.extend(_graph_propagation_warnings(direct_hit_kbs, kb_files, graph_cache, warnings, stale))
 
     result = _overall_status(warnings, stale, verify)
@@ -222,24 +223,78 @@ def all_source_files(config: DriftKBConfig) -> tuple[str, ...]:
     for path in config.sources.root.rglob("*"):
         if not path.is_file():
             continue
+        try:
+            repo_relative = path.relative_to(config.repo_root).as_posix()
+        except ValueError:
+            continue
+        if not repo_path_matches_source_filters(
+            repo_relative,
+            include=config.sources.include,
+            exclude=config.sources.exclude,
+        ):
+            continue
         relative = path.relative_to(config.sources.root).as_posix()
-        if path_matches_any(relative, config.sources.exclude):
-            continue
-        if config.sources.include and not path_matches_any(relative, config.sources.include):
-            continue
         files.append(relative)
     return tuple(sorted(files))
+
+
+def changed_source_files(config: DriftKBConfig, base_commit: str, *, include_worktree: bool = True) -> tuple[str, ...]:
+    return repo_paths_relative_to_source_root(
+        get_changed_files(config.repo_root, base_commit, include_worktree=include_worktree),
+        config.repo_root,
+        config.sources.root,
+        include=config.sources.include,
+        exclude=config.sources.exclude,
+    )
+
+
+def _fixed_last_verified_commit(
+    kb_file: KBFile,
+    config: DriftKBConfig,
+    warnings: list[ValidationIssue],
+) -> str | None:
+    value = kb_file.last_verified_commit
+    if value is None:
+        return None
+    if not is_fixed_commit_ref(value):
+        warnings.append(
+            _issue(
+                "last_verified_commit_not_fixed",
+                "last_verified_commit must be a fixed commit SHA, not a moving ref such as HEAD or a branch "
+                "name; using a conservative source scan",
+                kb_file,
+                ValidationStatus.WARN,
+                metadata={"last_verified_commit": value},
+            )
+        )
+        return None
+    if not commit_exists(config.repo_root, value):
+        warnings.append(
+            _issue(
+                "last_verified_commit_missing_in_git",
+                "last_verified_commit does not exist in this repository; using a conservative source scan",
+                kb_file,
+                ValidationStatus.WARN,
+                metadata={"last_verified_commit": value},
+            )
+        )
+        return None
+    try:
+        return resolve_commit(config.repo_root, value)
+    except GitError:
+        return value
 
 
 def _paths_without_equal_fingerprint_snapshots(
     paths: tuple[str, ...],
     kb_file: KBFile,
     config: DriftKBConfig,
-) -> tuple[str, ...]:
+) -> tuple[tuple[str, ...], list[ValidationIssue]]:
     if not config.fingerprints.enabled or not paths:
-        return paths
+        return paths, []
 
     stale_paths: list[str] = []
+    issues: list[ValidationIssue] = []
     adapter_names = kb_file.adapters or config.adapters.enabled
     adapters = build_adapters(adapter_names)
     for source_path in paths:
@@ -250,13 +305,38 @@ def _paths_without_equal_fingerprint_snapshots(
             continue
         try:
             current = adapter.extract(absolute, config.sources.root)
-            snapshot = load_snapshot(config.fingerprints.snapshot_dir, current.file, current.adapter)
+            snapshot = load_snapshot_record(config.fingerprints.snapshot_dir, current.file, current.adapter)
         except (OSError, UnicodeError, ValueError):
             stale_paths.append(source_path)
             continue
-        if not compare_fingerprint(current, snapshot):
+        if snapshot is None or not compare_fingerprint(current, snapshot.fingerprint):
             stale_paths.append(source_path)
-    return tuple(stale_paths)
+            continue
+        trust_error = _fingerprint_snapshot_trust_error(snapshot, kb_file)
+        if trust_error is not None:
+            issues.append(
+                _issue(
+                    "fingerprint_snapshot_untrusted",
+                    "fingerprint snapshot matches current source but is not bound to this KB baseline; "
+                    "treating the source as changed",
+                    kb_file,
+                    ValidationStatus.WARN,
+                    metadata={"source_path": source_path, "reason": trust_error},
+                )
+            )
+            stale_paths.append(source_path)
+    return tuple(stale_paths), issues
+
+
+def _fingerprint_snapshot_trust_error(snapshot: FingerprintSnapshot, kb_file: KBFile) -> str | None:
+    kb_path = kb_file.path.as_posix()
+    if snapshot.kb_path != kb_path:
+        return "kb_path_mismatch_or_missing"
+    if snapshot.kb_last_verified_commit != kb_file.last_verified_commit:
+        return "kb_last_verified_commit_mismatch_or_missing"
+    if snapshot.source_changed_since_kb_last_verified is not False:
+        return "source_changed_since_kb_last_verified"
+    return None
 
 
 def _apply_reviewed_path_exemptions(
@@ -348,6 +428,7 @@ def _run_verify_blocks(kb_file: KBFile, config: DriftKBConfig) -> list[Validatio
             config.sources.root,
             allow_shell=config.verify.allow_shell,
             timeout_seconds=config.verify.timeout_seconds,
+            capture_samples=config.verify.capture_samples,
         )
         issues.append(
             ValidationIssue(
@@ -423,6 +504,28 @@ def _graph_propagation_warnings(
                     )
                 )
     return propagated
+
+
+def _graph_cache_warnings(kb_files: list[KBFile], graph_cache: CallGraphCache) -> list[ValidationIssue]:
+    if graph_cache.metadata.get("status") == "loaded":
+        return []
+    if not any(kb_file.propagate_callers or kb_file.propagate_callees for kb_file in kb_files):
+        return []
+
+    warnings = graph_cache.metadata.get("warnings", ())
+    message = "; ".join(str(item) for item in warnings) or "call graph cache is unavailable"
+    return [
+        ValidationIssue(
+            code="graph_cache_unavailable",
+            message=message,
+            path=None,
+            severity=ValidationStatus.WARN,
+            metadata={
+                "path": graph_cache.metadata.get("path"),
+                "status": graph_cache.metadata.get("status"),
+            },
+        )
+    ]
 
 
 def _verify_code(status: ValidationStatus) -> str:

@@ -23,8 +23,8 @@ Scope:
 
 Goal: identify missing KB coverage without making generated output trusted by default.
 
-Status: partially implemented in `0.1.0`; future work should refine reports,
-workflow docs, and risk-pattern tuning.
+Status: implemented for the local workflow; future work should refine
+project-specific risk-pattern tuning and generated stub ergonomics.
 
 Scope:
 
@@ -39,24 +39,37 @@ Scope:
 
 Goal: make language-specific fingerprinting extensible.
 
-Planned scope:
+Status: partially implemented.
+
+Implemented:
 
 - Stable adapter interface for fingerprint extraction.
 - Built-in generic adapter.
-- Java regex adapter refinement.
-- Preview adapters for Python, TypeScript, and Go.
-- Adapter configuration examples.
+- Java regex adapter.
+- Python AST adapter.
+- Adapter entry point group: `driftkb.adapters`.
 - Tests that prove the core does not hard-code any single language.
+
+Remaining scope:
+
+- Preview adapters for TypeScript and Go.
+- More adapter configuration examples.
+- More adapter compatibility tests.
 
 ## v0.4: Graph Provider Plugin
 
 Goal: define an optional provider boundary for call graph cache generation.
 
-Planned scope:
+Status: partially implemented.
+
+Implemented:
 
 - Graph provider plugin interface.
 - Cache schema for generated call graph data.
 - Validation that core can consume the static cache without provider dependencies.
+
+Remaining scope:
+
 - Example external generator integration.
 - Documentation for provider security and portability expectations.
 

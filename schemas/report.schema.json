@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lliangcol/driftkb/schemas/report.schema.json",
+  "title": "DriftKB validation report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "result", "checked_at_commit", "stale", "warnings", "verify", "gaps", "metadata"],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "result": { "enum": ["PASS", "WARN", "FAIL"] },
+    "checked_at_commit": { "type": ["string", "null"] },
+    "stale": { "$ref": "#/$defs/issues" },
+    "warnings": { "$ref": "#/$defs/issues" },
+    "verify": { "$ref": "#/$defs/issues" },
+    "gaps": { "$ref": "#/$defs/issues" },
+    "metadata": { "type": "object" }
+  },
+  "$defs": {
+    "issues": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/issue" }
+    },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "path", "severity", "metadata"],
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" },
+        "path": { "type": ["string", "null"] },
+        "severity": { "enum": ["PASS", "WARN", "FAIL"] },
+        "metadata": { "type": "object" }
+      }
+    }
+  }
+}

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from driftkb.core.config import ConfigError, parse_simple_yaml
+from driftkb.core.config import ConfigError, parse_yaml_mapping
 from driftkb.core.models import ProfileConfig
 
 
@@ -37,7 +37,7 @@ def split_frontmatter(markdown: str) -> FrontmatterDocument:
     body = normalized[end_marker + len("\n---\n") :]
 
     try:
-        frontmatter = parse_simple_yaml(raw_frontmatter)
+        frontmatter = parse_yaml_mapping(raw_frontmatter, source="Markdown frontmatter")
     except ConfigError as exc:
         raise FrontmatterError(f"Invalid YAML frontmatter: {exc}") from exc
 

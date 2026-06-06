@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,8 +18,18 @@ class HookInstallResult:
     overwritten: bool = False
 
 
-def install_hook(repo_root: Path, hook: str, *, force: bool = False, strict: bool = False) -> HookInstallResult:
-    if hook != "pre-push":
+def install_hook(
+    repo_root: Path,
+    hook: str,
+    *,
+    force: bool = False,
+    strict: bool = False,
+    config: Path | None = None,
+    profile: str | None = None,
+    no_verify: bool = False,
+    output_format: str = "text",
+) -> HookInstallResult:
+    if hook not in {"pre-commit", "pre-push"}:
         raise HookInstallError(f"unsupported hook: {hook}")
 
     repo_root = repo_root.resolve()
@@ -28,14 +39,59 @@ def install_hook(repo_root: Path, hook: str, *, force: bool = False, strict: boo
     if existed and not force:
         raise HookInstallError(f"{hook_path} already exists; rerun with --force to overwrite it")
 
-    hook_path.write_text(_pre_push_template(strict=strict), encoding="utf-8", newline="\n")
+    hook_path.write_text(
+        _validate_hook_template(
+            strict=strict,
+            config=config,
+            profile=profile,
+            no_verify=no_verify,
+            output_format=output_format,
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
     _make_executable(hook_path)
     return HookInstallResult(hook=hook, path=hook_path, overwritten=existed)
 
 
-def _pre_push_template(*, strict: bool) -> str:
-    command = "driftkb validate --strict" if strict else "driftkb validate"
+def _validate_hook_template(
+    *,
+    strict: bool,
+    config: Path | None,
+    profile: str | None,
+    no_verify: bool,
+    output_format: str,
+) -> str:
+    command = _validate_command(
+        strict=strict,
+        config=config,
+        profile=profile,
+        no_verify=no_verify,
+        output_format=output_format,
+    )
     return f"#!/bin/sh\nset -e\n{command}\n"
+
+
+def _validate_command(
+    *,
+    strict: bool,
+    config: Path | None,
+    profile: str | None,
+    no_verify: bool,
+    output_format: str,
+) -> str:
+    args = ["driftkb", "validate"]
+    if config is not None:
+        args.extend(("--config", config.as_posix()))
+    if profile is not None:
+        args.extend(("--profile", profile))
+    if no_verify:
+        args.append("--no-verify")
+    if output_format != "text":
+        args.extend(("--format", output_format))
+    if strict:
+        args.append("--strict")
+    return " ".join(shlex.quote(item) for item in args)
 
 
 def _make_executable(path: Path) -> None:
